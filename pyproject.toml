@@ -1,0 +1,64 @@
+[project]
+name = "football-analyzer"
+version = "0.1.0"
+description = "Telegram-бот с математическими прогнозами на футбольные матчи"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiogram>=3.13,<4",
+    "apscheduler>=3.10,<4",
+    "soccerdata>=1.7",
+    "scipy>=1.11",
+    "aiosqlite>=0.20",
+    "aiohttp>=3.9",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+    "mypy>=1.11",
+]
+
+[project.scripts]
+football-analyzer = "football_analyzer.main:run"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+# %-форматирование выбрано сознательно: одинаково читается и в print, и в логах,
+# и не требует f-строк в сообщениях, которые собираются заранее.
+ignore = ["UP031"]
+
+[tool.ruff.lint.per-file-ignores]
+# scripts/ запускаются системным python (на сервере может быть 3.9) — им нельзя
+# синтаксис 3.10+/3.11+: это инструменты, которые обязаны работать без venv.
+"scripts/*.py" = ["UP006", "UP017", "UP035", "UP045"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+# У этих пакетов нет py.typed / стабов.
+module = ["apscheduler.*", "soccerdata.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

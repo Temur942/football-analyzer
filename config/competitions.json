@@ -1,0 +1,35 @@
+{
+  "note": "Соревнования, которые ведёт бот. Ключ espn проверяется scripts/check_sources.py на живом API (бесплатно). Ключ fbref понадобится для статистики (угловые, ЖК) — названия должны совпадать со страницей https://fbref.com/en/comps/, которую soccerdata читает браузером. Пока проверены только espn-ключи.",
+  "updated": "2026-10-30",
+  "season_start": "Aug",
+  "season_end": "May",
+  "competitions": [
+    { "id": "eng-premier-league", "name_ru": "АПЛ (Англия)", "country": "England", "tier": 1, "espn": "eng.1", "fbref": "Premier League" },
+    { "id": "eng-championship", "name_ru": "Чемпионшип (Англия, 2-й дивизион)", "country": "England", "tier": 2, "espn": "eng.2", "fbref": "EFL Championship" },
+
+    { "id": "esp-la-liga", "name_ru": "Ла-Лига (Испания)", "country": "Spain", "tier": 1, "espn": "esp.1", "fbref": "La Liga" },
+    { "id": "esp-segunda", "name_ru": "Сегунда (Испания, 2-й дивизион)", "country": "Spain", "tier": 2, "espn": "esp.2", "fbref": "Segunda División" },
+
+    { "id": "ita-serie-a", "name_ru": "Серия A (Италия)", "country": "Italy", "tier": 1, "espn": "ita.1", "fbref": "Serie A (M)" },
+    { "id": "ita-serie-b", "name_ru": "Серия B (Италия, 2-й дивизион)", "country": "Italy", "tier": 2, "espn": "ita.2", "fbref": "Serie B" },
+
+    { "id": "ger-bundesliga", "name_ru": "Бундеслига (Германия)", "country": "Germany", "tier": 1, "espn": "ger.1", "fbref": "Fußball-Bundesliga" },
+    { "id": "ger-2-bundesliga", "name_ru": "2-я Бундеслига (Германия)", "country": "Germany", "tier": 2, "espn": "ger.2", "fbref": "2. Fußball-Bundesliga" },
+
+    { "id": "fra-ligue-1", "name_ru": "Лига 1 (Франция)", "country": "France", "tier": 1, "espn": "fra.1", "fbref": "Ligue 1" },
+    { "id": "fra-ligue-2", "name_ru": "Лига 2 (Франция)", "country": "France", "tier": 2, "espn": "fra.2", "fbref": "Ligue 2" },
+
+    { "id": "por-primeira-liga", "name_ru": "Примейра-лига (Португалия)", "country": "Portugal", "tier": 1, "espn": "por.1", "fbref": "Primeira Liga" },
+    { "id": "ned-eredivisie", "name_ru": "Эредивизи (Нидерланды)", "country": "Netherlands", "tier": 1, "espn": "ned.1", "fbref": "Eredivisie" },
+    { "id": "tur-super-lig", "name_ru": "Суперлига (Турция)", "country": "Turkey", "tier": 1, "espn": "tur.1", "fbref": "Süper Lig" },
+    { "id": "den-superliga", "name_ru": "Суперлига (Дания)", "country": "Denmark", "tier": 1, "espn": "den.1", "fbref": "Superliga" },
+
+    { "id": "uefa-champions-league", "name_ru": "Лига чемпионов УЕФА", "country": "UEFA", "tier": 1, "espn": "uefa.champions", "fbref": "UEFA Champions League" },
+    { "id": "uefa-europa-league", "name_ru": "Лига Европы УЕФА", "country": "UEFA", "tier": 1, "espn": "uefa.europa", "fbref": "UEFA Europa League" },
+    { "id": "uefa-conference-league", "name_ru": "Лига конференций УЕФА", "country": "UEFA", "tier": 1, "espn": "uefa.europa.conf", "fbref": "UEFA Conference League" },
+
+    { "id": "int-world-cup-qualifiers-uefa", "name_ru": "Отбор ЧМ (УЕФА)", "country": "International", "tier": 1, "espn": "fifa.worldq.uefa", "fbref": "FIFA World Cup Qualification" },
+    { "id": "int-nations-league", "name_ru": "Лига наций УЕФА", "country": "International", "tier": 1, "espn": "uefa.nations", "fbref": "UEFA Nations League" },
+    { "id": "int-friendly", "name_ru": "Товарищеские матчи сборных", "country": "International", "tier": 1, "espn": "fifa.friendly", "fbref": "International Friendlies" }
+  ]
+}
