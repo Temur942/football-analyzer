@@ -1,0 +1,57 @@
+# =============================================================================
+# football-analyzer — unit для systemd (стейдж).
+#
+# Почему systemd, а не pm2: для Python-процесса systemd даёт автозапуск после
+# падения и перезагрузки, ротацию логов через journald и не требует ставить
+# Node.js. pm2 — привычка от Next.js-проектов, здесь он лишний.
+#
+# Установка (на сервере, под root):
+#   cp deploy/football-analyzer-stage.service /etc/systemd/system/
+#   systemctl daemon-reload
+#   systemctl enable --now football-analyzer-stage
+#
+# Проверка:
+#   systemctl status football-analyzer-stage
+#   journalctl -u football-analyzer-stage -n 50 --no-pager
+#
+# ВАЖНО: пути и имя пользователя ниже — шаблон. После провижининга сверить
+# с фактическими (каталог стейджа, пользователь, путь к venv).
+# =============================================================================
+
+[Unit]
+Description=football-analyzer (stage) — Telegram-бот прогнозов
+After=network-online.target postgresql.service
+Wants=network-online.target
+# Не запускать второй экземпляр: два процесса будут дублировать отправку.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=football
+Group=football
+WorkingDirectory=/var/www/football-analyzer-stage
+# Секреты (токен бота, DSN базы) — в файле окружения, права 600, вне git.
+EnvironmentFile=/etc/football-analyzer/stage.env
+Environment=APP_ENV=stage
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/var/www/football-analyzer-stage/.venv/bin/python -m football_analyzer.main
+Restart=always
+RestartSec=5
+# Мягкая остановка: дать процессу закрыть сессию бота и планировщик.
+KillSignal=SIGINT
+TimeoutStopSec=30
+
+# Минимальные ограничения: бот не должен съесть весь диск логами.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/www/football-analyzer-stage/var
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=football-analyzer-stage
+
+[Install]
+WantedBy=multi-user.target
