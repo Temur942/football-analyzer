@@ -16,14 +16,17 @@ BACKUP_DIR=/var/backups/football
 DB_NAME=football
 KEEP_DAYS=7
 
-mkdir -p "$BACKUP_DIR"
-chmod 700 "$BACKUP_DIR"
+# Каталог принадлежит postgres: дамп создаёт он же, поэтому файл ему же
+# и читается при восстановлении. Проверено на практике: дамп от root
+# PostgreSQL прочитать не может, и бэкап оказывается бесполезен.
+install -d -m 700 -o postgres -g postgres "$BACKUP_DIR"
 
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
 FILE="$BACKUP_DIR/football-$STAMP.dump"
 
 # Дамп от имени postgres: у роли football может не быть прав на чтение всех схем.
-if ! sudo -u postgres pg_dump -Fc --no-owner --no-privileges "$DB_NAME" > "$FILE" 2>/tmp/football-backup.err; then
+# -f вместо ">" — тогда файл создаёт сам postgres и он же сможет его прочитать.
+if ! sudo -u postgres pg_dump -Fc --no-owner --no-privileges -f "$FILE" "$DB_NAME" 2>/tmp/football-backup.err; then
   echo "ОШИБКА: pg_dump не смог снять копию" >&2
   cat /tmp/football-backup.err >&2 || true
   rm -f "$FILE"
@@ -31,7 +34,7 @@ if ! sudo -u postgres pg_dump -Fc --no-owner --no-privileges "$DB_NAME" > "$FILE
 fi
 
 # Проверка, что дамп читается. Размер меньше 1 КБ — подозрительно.
-if ! pg_restore --list "$FILE" >/dev/null 2>&1; then
+if ! sudo -u postgres pg_restore --list "$FILE" >/dev/null 2>&1; then
   echo "ОШИБКА: дамп $FILE не открывается pg_restore" >&2
   exit 1
 fi

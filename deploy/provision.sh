@@ -181,7 +181,11 @@ log "9/10 доступ: только по ключу"
 # Парольный вход выключаем ПОСЛЕ того, как убедились, что ключ работает
 # (скрипт запускается по SSH с ключом — иначе он бы сюда не дошёл).
 install -d -m 755 /etc/ssh/sshd_config.d
-cat > /etc/ssh/sshd_config.d/60-football.conf <<'EOF'
+# Имя с 00- НЕ случайно: sshd берёт ПЕРВОЕ встреченное значение, а образ
+# хостера кладёт 40-hosting.conf с PasswordAuthentication yes. Файл 60- был бы
+# проигнорирован — проверено на живом сервере 05.11.2026.
+rm -f /etc/ssh/sshd_config.d/60-football.conf
+cat > /etc/ssh/sshd_config.d/00-football.conf <<'EOF'
 # football-analyzer: вход только по ключу. root — только с ключом.
 PasswordAuthentication no
 KbdInteractiveAuthentication no
@@ -189,11 +193,11 @@ PermitRootLogin prohibit-password
 EOF
 if sshd -t 2>/tmp/sshd-test.err; then
   systemctl reload ssh 2>/dev/null || systemctl reload sshd
-  echo "вход по паролю отключён, конфиг проверен (sshd -t)"
+  echo "вход по паролю отключён, конфиг проверен (sshd -t)"; sshd -T | grep -E "^passwordauthentication|^permitrootlogin"
 else
   echo "ОШИБКА: sshd -t не принял конфиг, откатываю" >&2
   cat /tmp/sshd-test.err >&2
-  rm -f /etc/ssh/sshd_config.d/60-football.conf
+  rm -f /etc/ssh/sshd_config.d/00-football.conf
   exit 1
 fi
 
