@@ -1,0 +1,34 @@
+# =============================================================================
+# football-analyzer — разовый сбор расписания (запускается таймером).
+#
+# Зачем отдельно от бота: сбор расписания не требует BOT_TOKEN и должен идти
+# круглосуточно, даже если бот остановлен на время правок. Type=oneshot —
+# процесс живёт, пока длится проход, и умирает; за него не платим памятью.
+#
+# Ручной запуск:
+#   systemctl start football-analyzer-sync
+#   journalctl -u football-analyzer-sync -n 30 --no-pager
+# =============================================================================
+
+[Unit]
+Description=football-analyzer: сбор расписания матчей
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=football
+Group=football
+WorkingDirectory=/var/www/football-analyzer-stage
+EnvironmentFile=/etc/football-analyzer/stage.env
+Environment=APP_ENV=stage
+Environment=PYTHONUNBUFFERED=1
+# Четыре дня вперёд: матч, до которого 5 часов до начала сбора, уже в выборке.
+ExecStart=/var/www/football-analyzer-stage/.venv/bin/python -m football_analyzer.cli sync-schedule --days 4
+TimeoutStartSec=600
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/www/football-analyzer-stage/var

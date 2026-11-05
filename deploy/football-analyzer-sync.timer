@@ -1,0 +1,24 @@
+# =============================================================================
+# football-analyzer — таймер сбора расписания.
+#
+# Раз в 15 минут: источник умеет отдавать неполные ответы (см. AGENTS.md §6,
+# ловушка ESPN), поэтому частые короткие проходы надёжнее одного длинного.
+#
+# Включение:
+#   systemctl daemon-reload
+#   systemctl enable --now football-analyzer-sync.timer
+# Состояние:
+#   systemctl list-timers football-analyzer-sync.timer
+# =============================================================================
+
+[Unit]
+Description=football-analyzer: сбор расписания каждые 15 минут
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+AccuracySec=30s
+Unit=football-analyzer-sync.service
+
+[Install]
+WantedBy=timers.target
