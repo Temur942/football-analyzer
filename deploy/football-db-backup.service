@@ -1,0 +1,14 @@
+# =============================================================================
+# football-analyzer — резервное копирование базы.
+# =============================================================================
+
+[Unit]
+Description=football-analyzer: резервная копия базы PostgreSQL
+After=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/football-db-backup.sh
+
+NoNewPrivileges=true
+PrivateTmp=true

@@ -33,7 +33,7 @@ log() { printf '\n=== %s ===\n' "$*"; }
 [ "$(id -u)" -eq 0 ] || { echo "ОШИБКА: скрипт запускается под root" >&2; exit 1; }
 
 # --------------------------------------------------------------------------- #
-log "1/8 системный пользователь"
+log "1/10 системный пользователь"
 if id -u "$APP_USER" >/dev/null 2>&1; then
   echo "пользователь $APP_USER уже есть"
 else
@@ -42,13 +42,13 @@ else
 fi
 
 # --------------------------------------------------------------------------- #
-log "2/8 каталоги"
+log "2/10 каталоги"
 install -d -o "$APP_USER" -g "$APP_USER" /var/www
 install -d -m 750 -o root -g "$APP_USER" "$CONF_DIR"
 echo "готово: /var/www, $CONF_DIR"
 
 # --------------------------------------------------------------------------- #
-log "3/8 PostgreSQL: настройка под 2 ГБ RAM"
+log "3/10 PostgreSQL: настройка под 2 ГБ RAM"
 PG_VER=$(find /etc/postgresql -maxdepth 1 -mindepth 1 -type d -printf '%f\n' | sort -V | tail -1)
 PG_CONF_DIR="/etc/postgresql/$PG_VER/main"
 if [ ! -d "$PG_CONF_DIR" ]; then
@@ -69,7 +69,7 @@ systemctl restart postgresql
 systemctl is-active --quiet postgresql && echo "postgresql перезапущен и активен"
 
 # --------------------------------------------------------------------------- #
-log "4/8 роль и база"
+log "4/10 роль и база"
 # Пароль генерируется один раз и живёт только в файле окружения.
 if grep -q '^DB_PASSWORD=' "$ENV_FILE" 2>/dev/null; then
   DB_PASSWORD=$(sed -n 's/^DB_PASSWORD=//p' "$ENV_FILE" | head -1)
@@ -99,7 +99,7 @@ else
 fi
 
 # --------------------------------------------------------------------------- #
-log "5/8 файл окружения"
+log "5/10 файл окружения"
 if [ -f "$ENV_FILE" ]; then
   echo "$ENV_FILE уже существует — не перезаписываю (проверьте вручную)"
 else
@@ -124,7 +124,7 @@ EOF
 fi
 
 # --------------------------------------------------------------------------- #
-log "6/8 firewall"
+log "6/10 firewall"
 # На образах FirstVDS ufw уже открыт широко: 80/443, 21, 25/465/587, 53, 110,
 # 143/993/995 и панель ispmanager. Нам из этого не нужно НИЧЕГО — сервис
 # слушает только SSH и локальный PostgreSQL. Открытые почтовые порты — это
@@ -142,7 +142,7 @@ ufw --force enable >/dev/null
 ufw status | head -8
 
 # --------------------------------------------------------------------------- #
-log "7/8 код и venv"
+log "7/10 код и venv"
 if [ -d "$APP_DIR/.git" ]; then
   sudo -u "$APP_USER" git -C "$APP_DIR" fetch --quiet origin
   sudo -u "$APP_USER" git -C "$APP_DIR" reset --hard --quiet origin/main
@@ -163,7 +163,7 @@ sudo -u "$APP_USER" "$APP_DIR/.venv/bin/pip" install --quiet -e "$APP_DIR"
 echo "зависимости установлены"
 
 # --------------------------------------------------------------------------- #
-log "8/8 systemd"
+log "8/10 systemd"
 install -m 644 "$APP_DIR/deploy/football-analyzer-stage.service" \
   /etc/systemd/system/football-analyzer-stage.service
 install -m 644 "$APP_DIR/deploy/football-analyzer-sync.service" \
@@ -175,6 +175,36 @@ systemctl daemon-reload
 systemctl enable --now football-analyzer-sync.timer >/dev/null
 echo "таймер сбора расписания включён"
 echo "unit бота установлен (не включён: сначала нужен BOT_TOKEN)"
+
+# --------------------------------------------------------------------------- #
+log "9/10 доступ: только по ключу"
+# Парольный вход выключаем ПОСЛЕ того, как убедились, что ключ работает
+# (скрипт запускается по SSH с ключом — иначе он бы сюда не дошёл).
+install -d -m 755 /etc/ssh/sshd_config.d
+cat > /etc/ssh/sshd_config.d/60-football.conf <<'EOF'
+# football-analyzer: вход только по ключу. root — только с ключом.
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin prohibit-password
+EOF
+if sshd -t 2>/tmp/sshd-test.err; then
+  systemctl reload ssh 2>/dev/null || systemctl reload sshd
+  echo "вход по паролю отключён, конфиг проверен (sshd -t)"
+else
+  echo "ОШИБКА: sshd -t не принял конфиг, откатываю" >&2
+  cat /tmp/sshd-test.err >&2
+  rm -f /etc/ssh/sshd_config.d/60-football.conf
+  exit 1
+fi
+
+# --------------------------------------------------------------------------- #
+log "10/10 резервные копии базы"
+install -m 755 "$APP_DIR/deploy/football-db-backup.sh" /usr/local/bin/football-db-backup.sh
+install -m 644 "$APP_DIR/deploy/football-db-backup.service" /etc/systemd/system/
+install -m 644 "$APP_DIR/deploy/football-db-backup.timer" /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now football-db-backup.timer >/dev/null
+echo "таймер бэкапа включён (ежедневно 03:30 UTC, хранение 7 дней)"
 
 log "ГОТОВО"
 echo "База: $DB_NAME, пользователь: $DB_USER, host 127.0.0.1"
