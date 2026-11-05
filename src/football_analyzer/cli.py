@@ -15,9 +15,13 @@ import json
 import logging
 import sys
 
+import aiohttp
+
 from football_analyzer.competitions import active_competitions
 from football_analyzer.config import Settings, get_settings
 from football_analyzer.datasources.espn import ScheduleFetch, fetch_schedule
+from football_analyzer.datasources.espn_history import discover_season
+from football_analyzer.datasources.espn_stats import fetch_summary, parse_summary
 from football_analyzer.models import Competition
 from football_analyzer.storage import db
 
@@ -221,6 +225,110 @@ def cmd_sync_schedule(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _discover_history(
+    dsn: str, competitions: list[Competition], seasons: list[str], pause: float
+) -> list[tuple[str, str, int, str]]:
+    """Найти прошедшие матчи за сезоны и записать их в базу."""
+    pool = await db.connect(dsn)
+    rows: list[tuple[str, str, int, str]] = []
+    try:
+        await db.apply_schema(pool)
+        await db.upsert_competitions(pool, competitions)
+        async with aiohttp.ClientSession() as session:
+            for competition in competitions:
+                for season in seasons:
+                    result = await discover_season(
+                        session, competition, season, pause_seconds=pause
+                    )
+                    if result.skipped:
+                        rows.append((competition.id, season, 0, "пропущено: " + result.skipped))
+                        continue
+                    new_count, updated = await db.upsert_fixtures(pool, result.fixtures)
+                    note = "новых %d, обновлено %d" % (new_count, updated)
+                    if result.errors:
+                        note += ", ошибок %d" % len(result.errors)
+                    rows.append((competition.id, season, len(result.fixtures), note))
+    finally:
+        await pool.close()
+    return rows
+
+
+def cmd_discover_history(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    competitions = active_competitions()
+    if args.competition:
+        wanted = set(args.competition)
+        competitions = [c for c in competitions if c.id in wanted]
+    try:
+        rows = asyncio.run(
+            _discover_history(
+                settings.require_database_url(), competitions, args.season, args.pause
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    print("=" * 88)
+    print("  ПОИСК ИСТОРИИ: %d соревнований × %d сезонов" % (len(competitions), len(args.season)))
+    print("=" * 88)
+    for competition_id, season, count, note in rows:
+        print("  %-30s %-12s матчей: %-5d %s" % (competition_id[:30], season, count, note[:34]))
+    print("=" * 88)
+    return EXIT_OK
+
+
+async def _sync_stats(dsn: str, limit: int, pause: float) -> tuple[int, int, dict[str, int]]:
+    pool = await db.connect(dsn)
+    done = failed = 0
+    try:
+        await db.apply_schema(pool)
+        pending = await db.pending_stats(pool, limit)
+        if pending:
+            async with aiohttp.ClientSession() as session:
+                for row in pending:
+                    try:
+                        data = await fetch_summary(
+                            session, row["espn_slug"], str(row["source_game_id"])
+                        )
+                        stats = parse_summary(data, str(row["source_game_id"]))
+                        if stats is None or not stats.has_corners_and_cards:
+                            await db.mark_stats_error(pool, row["id"], "в summary нет углов или ЖК")
+                            failed += 1
+                        else:
+                            await db.save_stats(pool, row["id"], stats)
+                            done += 1
+                    except Exception as exc:  # noqa: BLE001
+                        await db.mark_stats_error(pool, row["id"], str(exc))
+                        failed += 1
+                    await asyncio.sleep(pause)
+        progress = await db.stats_progress(pool)
+    finally:
+        await pool.close()
+    return done, failed, progress
+
+
+def cmd_sync_stats(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        done, failed, progress = asyncio.run(
+            _sync_stats(settings.require_database_url(), args.limit, args.pause)
+        )
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    print("=" * 70)
+    print("  СТАТИСТИКА МАТЧЕЙ")
+    print("=" * 70)
+    print("  Записано сейчас:   %d" % done)
+    print("  Неудач сейчас:     %d" % failed)
+    print("  Всего матчей:      %d" % progress["total"])
+    print("  С статистикой:     %d" % progress["done"])
+    print("  Ждёт обработки:    %d" % progress["pending"])
+    print("  Не удалось (3×):   %d" % progress["failed"])
+    print("=" * 70)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -255,6 +363,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="только это соревнование (можно несколько)",
     )
     p_sync.set_defaults(func=cmd_sync_schedule)
+
+    p_history = sub.add_parser("discover-history", help="найти прошедшие матчи за сезоны")
+    p_history.add_argument(
+        "--season", action="append", required=True, help="сезон, например 2024-2025"
+    )
+    p_history.add_argument(
+        "--competition", action="append", default=None, help="только это соревнование"
+    )
+    p_history.add_argument("--pause", type=float, default=0.3, help="пауза между запросами")
+    p_history.set_defaults(func=cmd_discover_history)
+
+    p_stats = sub.add_parser("sync-stats", help="догрузить углы и ЖК по прошедшим матчам")
+    p_stats.add_argument("--limit", type=int, default=2000, help="сколько матчей за проход")
+    p_stats.add_argument("--pause", type=float, default=0.4, help="пауза между запросами")
+    p_stats.set_defaults(func=cmd_sync_stats)
 
     return parser
 

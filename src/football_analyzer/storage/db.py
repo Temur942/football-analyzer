@@ -20,7 +20,7 @@ from football_analyzer.models import Competition, Fixture
 log = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-SCHEMA_PATH = PROJECT_ROOT / "sql" / "001_init.sql"
+SCHEMA_DIR = PROJECT_ROOT / "sql"
 
 
 async def connect(dsn: str) -> asyncpg.Pool:
@@ -28,13 +28,24 @@ async def connect(dsn: str) -> asyncpg.Pool:
     return await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=5, command_timeout=30)
 
 
-async def apply_schema(pool: asyncpg.Pool, path: Path = SCHEMA_PATH) -> None:
-    """Применить схему. Повторный запуск безопасен (IF NOT EXISTS)."""
-    # Чтение файла — блокирующая операция, уводим в поток, чтобы не вешать цикл.
-    sql = await asyncio.to_thread(path.read_text, encoding="utf-8")
+async def apply_schema(pool: asyncpg.Pool, directory: Path = SCHEMA_DIR) -> list[Path]:
+    """Применить все миграции из каталога по порядку имён.
+
+    Повторный запуск безопасен: каждая миграция аддитивная
+    (IF NOT EXISTS / ADD COLUMN IF NOT EXISTS).
+    """
+    files = await asyncio.to_thread(lambda: sorted(directory.glob("*.sql")))
+    if not files:
+        raise RuntimeError("не найдено ни одного файла схемы в %s" % directory)
+    # Чтение файлов — блокирующая операция, уводим в поток, чтобы не вешать цикл.
+    texts = await asyncio.to_thread(
+        lambda: [(path, path.read_text(encoding="utf-8")) for path in files]
+    )
     async with pool.acquire() as conn:
-        await conn.execute(sql)
-    log.info("схема применена: %s", path)
+        for _path, sql in texts:
+            await conn.execute(sql)
+    log.info("схема применена: %s", ", ".join(path.name for path, _ in texts))
+    return [path for path, _ in texts]
 
 
 async def upsert_competitions(pool: asyncpg.Pool, competitions: list[Competition]) -> int:
@@ -159,3 +170,103 @@ async def finish_ingest_run(
             updated_count,
             error,
         )
+
+
+async def pending_stats(
+    pool: asyncpg.Pool, limit: int, max_attempts: int = 3
+) -> list[asyncpg.Record]:
+    """Матчи, у которых ещё нет статистики (возобновляемая выгрузка).
+
+    Выбираются только завершённые матчи с известным id в источнике.
+    Матчи, у которых уже было max_attempts неудач, пропускаются: иначе
+    один «мёртвый» матч будет пытаться скачаться вечно.
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            """
+            SELECT m.id, m.source_game_id, c.source_key AS espn_slug
+              FROM matches m
+              JOIN competitions c ON c.id = m.competition_id
+             WHERE m.stats_fetched_at IS NULL
+               AND m.stats_attempts < $2
+               AND m.source_game_id IS NOT NULL
+               AND m.status = 'finished'
+             ORDER BY m.kickoff_utc DESC
+             LIMIT $1
+            """,
+            limit,
+            max_attempts,
+        )
+
+
+async def save_stats(pool: asyncpg.Pool, match_id: int, stats: object) -> None:
+    """Записать статистику матча и отметить его обработанным."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE matches SET
+                home_goals = COALESCE($2, home_goals),
+                away_goals = COALESCE($3, away_goals),
+                home_goals_ht = $4,
+                away_goals_ht = $5,
+                home_corners = $6,
+                away_corners = $7,
+                home_yellow = $8,
+                away_yellow = $9,
+                home_red = $10,
+                away_red = $11,
+                stats_fetched_at = now(),
+                stats_error = NULL,
+                updated_at = now()
+             WHERE id = $1
+            """,
+            match_id,
+            stats.home_goals,  # type: ignore[attr-defined]
+            stats.away_goals,  # type: ignore[attr-defined]
+            stats.home_goals_ht,  # type: ignore[attr-defined]
+            stats.away_goals_ht,  # type: ignore[attr-defined]
+            stats.home_corners,  # type: ignore[attr-defined]
+            stats.away_corners,  # type: ignore[attr-defined]
+            stats.home_yellow,  # type: ignore[attr-defined]
+            stats.away_yellow,  # type: ignore[attr-defined]
+            stats.home_red,  # type: ignore[attr-defined]
+            stats.away_red,  # type: ignore[attr-defined]
+        )
+
+
+async def mark_stats_error(pool: asyncpg.Pool, match_id: int, error: str) -> None:
+    """Отметить неудачную попытку, не помечая матч обработанным."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE matches
+               SET stats_attempts = stats_attempts + 1,
+                   stats_error = $2,
+                   updated_at = now()
+             WHERE id = $1
+            """,
+            match_id,
+            error[:500],
+        )
+
+
+async def stats_progress(pool: asyncpg.Pool) -> dict[str, int]:
+    """Сколько всего матчей, сколько с статистикой и сколько ждёт."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT count(*) AS total,
+                   count(stats_fetched_at) AS done,
+                   count(*) FILTER (
+                       WHERE stats_fetched_at IS NULL
+                         AND stats_attempts < 3
+                         AND source_game_id IS NOT NULL
+                         AND status = 'finished'
+                   ) AS pending,
+                   count(*) FILTER (
+                       WHERE stats_error IS NOT NULL AND stats_attempts >= 3
+                   ) AS failed
+              FROM matches
+            """
+        )
+    return {key: int(row[key] or 0) for key in ("total", "done", "pending", "failed")}
