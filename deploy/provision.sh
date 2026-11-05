@@ -107,7 +107,7 @@ else
 # Секреты стейджа football-analyzer. Права 640 root:$APP_USER, в git не попадает.
 APP_ENV=stage
 DB_PASSWORD=$DB_PASSWORD
-DATABASE_URL=postgresql://$DB_USER:$DB_PASSWORD@127.0.0.1:5432/$DB_NAME
+DATABASE_URL=postgresql://$DB_USER:$DB_PASSWORD@127.0.0.1:5432/$DB_NAME?sslmode=disable
 # Токен от @BotFather: заполнить перед запуском бота.
 BOT_TOKEN=
 # Погода: Open-Meteo, ключ не нужен.
@@ -115,6 +115,8 @@ WEATHER_API_URL=https://api.open-meteo.com/v1/forecast
 HTTP_TIMEOUT_SECONDS=20
 LOG_LEVEL=INFO
 FORECAST_LEAD_HOURS=5
+# Кэш soccerdata внутри проекта: домашний каталог сервису закрыт.
+SOCCERDATA_DIR=$APP_DIR/var/soccerdata
 EOF
   chown root:"$APP_USER" "$ENV_FILE"
   chmod 640 "$ENV_FILE"

@@ -35,6 +35,8 @@ WorkingDirectory=/var/www/football-analyzer-stage
 EnvironmentFile=/etc/football-analyzer/stage.env
 Environment=APP_ENV=stage
 Environment=PYTHONUNBUFFERED=1
+# Кэш soccerdata: home закрыт ProtectHome=true.
+Environment=SOCCERDATA_DIR=/var/www/football-analyzer-stage/var/soccerdata
 ExecStart=/var/www/football-analyzer-stage/.venv/bin/python -m football_analyzer.main
 Restart=always
 RestartSec=5

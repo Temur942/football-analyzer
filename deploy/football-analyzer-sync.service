@@ -23,6 +23,8 @@ WorkingDirectory=/var/www/football-analyzer-stage
 EnvironmentFile=/etc/football-analyzer/stage.env
 Environment=APP_ENV=stage
 Environment=PYTHONUNBUFFERED=1
+# Кэш soccerdata: home закрыт ProtectHome=true.
+Environment=SOCCERDATA_DIR=/var/www/football-analyzer-stage/var/soccerdata
 # Четыре дня вперёд: матч, до которого 5 часов до начала сбора, уже в выборке.
 ExecStart=/var/www/football-analyzer-stage/.venv/bin/python -m football_analyzer.cli sync-schedule --days 4
 TimeoutStartSec=600
