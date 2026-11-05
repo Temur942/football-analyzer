@@ -28,7 +28,9 @@ class Settings(BaseSettings):
     bot_token: str = Field(default="", description="токен Telegram-бота")
     bot_admin_ids: str = Field(default="", description="ID админов через запятую")
 
-    db_path: str = Field(default="var/football.sqlite3")
+    # PostgreSQL на сервере (решение заказчика). Секрет: только .env.local или
+    # EnvironmentFile systemd, в git не попадает.
+    database_url: str = Field(default="")
 
     forecast_lead_hours: int = Field(default=5, ge=1, le=72)
     scheduler_tick_seconds: int = Field(default=60, ge=10, le=3600)
@@ -69,6 +71,14 @@ class Settings(BaseSettings):
         """Путь из настроек → абсолютный путь (относительные считаются от корня)."""
         path = Path(relative)
         return path if path.is_absolute() else PROJECT_ROOT / path
+
+    def require_database_url(self) -> str:
+        if not self.database_url:
+            raise RuntimeError(
+                "DATABASE_URL не задан: без базы расписание некуда писать. "
+                "Заполните .env.local (см. .env.example) или EnvironmentFile systemd."
+            )
+        return self.database_url
 
     def require_bot_token(self) -> str:
         if not self.bot_token:
