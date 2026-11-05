@@ -125,9 +125,21 @@ fi
 
 # --------------------------------------------------------------------------- #
 log "6/8 firewall"
+# На образах FirstVDS ufw уже открыт широко: 80/443, 21, 25/465/587, 53, 110,
+# 143/993/995 и панель ispmanager. Нам из этого не нужно НИЧЕГО — сервис
+# слушает только SSH и локальный PostgreSQL. Открытые почтовые порты — это
+# приглашение для спам-ботов и DNS-амплификации.
+ufw --force reset >/dev/null 2>&1
+ufw default deny incoming >/dev/null
+ufw default allow outgoing >/dev/null
 ufw allow OpenSSH >/dev/null
+# Проверка ДО включения: иначе можно остаться без доступа к серверу.
+ufw show added | grep -qi openssh || {
+  echo "ОШИБКА: правило SSH не добавлено, firewall не включаю" >&2
+  exit 1
+}
 ufw --force enable >/dev/null
-ufw status | head -5
+ufw status | head -8
 
 # --------------------------------------------------------------------------- #
 log "7/8 код и venv"

@@ -59,11 +59,33 @@ python scripts/check_sources.py                               # проверка
 по игровым дням. Проверено 30.10.2026: 132 матча за 3 дня (83 запроса) и
 193 матча за окно с серединой недели (127 запросов), 0 ошибок.
 
+## Стейдж на сервере
+
+VDS FirstVDS (`168.113.176.166`, Ubuntu 24.04), каталог `/var/www/football-analyzer-stage`.
+
+```bash
+# код и зависимости (идемпотентно, можно запускать сколько угодно раз)
+ssh -i ~/.ssh/football_analyzer_deploy root@168.113.176.166 'bash /root/provision.sh'
+
+# что происходит
+ssh ... 'systemctl list-timers football-analyzer-sync.timer --no-pager'
+ssh ... 'journalctl -u football-analyzer-sync -n 30 --no-pager'
+
+# данные в базе (доказательство, а не лог)
+ssh ... 'sudo -u postgres psql -d football -c "select count(*) from matches;"'
+ssh ... 'sudo -u postgres psql -d football -c "select id, status, rows_seen, rows_new, rows_updated from ingest_runs order by id desc limit 5;"'
+
+# прогнать сбор руками
+ssh ... 'systemctl start football-analyzer-sync.service'
+```
+
+Сбор расписания идёт **сам каждые 15 минут** (systemd-таймер), бот пока не
+включён — нужен `BOT_TOKEN` от @BotFather в `/etc/football-analyzer/stage.env`.
+
 ## Статус
 
-Готово и проверено: получение расписания. Не начато: математика прогноза
-(`analysis/`), хранение в БД (`storage/`, схема в `sql/001_init.sql`), отправка
-за 5 часов (`scheduler/`), подписки.
+Готово и проверено: получение расписания, запись в PostgreSQL, автосбор по
+таймеру на сервере. Не начато: математика прогноза (`analysis/`), отправка
+за 5 часов (`scheduler/`), бот (`main.py` — ждёт токен), подписки.
 
-Точка входа бота — `src/football_analyzer/main.py`. Что дальше и какие вопросы
-открыты — в [AGENTS.md](AGENTS.md).
+Что дальше и какие вопросы открыты — в [AGENTS.md](AGENTS.md).
