@@ -105,7 +105,7 @@ football-analyzer/
 │   ├── provision.sh          ← идемпотентный провижининг VDS (Ubuntu 24.04)
 │   ├── football-analyzer-stage.service   ← бот (systemd), пока не включён
 │   ├── football-analyzer-sync.service    ← разовый сбор расписания
-│   └── football-analyzer-sync.timer      ← расписание сбора, каждые 15 мин
+│   └── football-analyzer-sync.timer      ← расписание сбора, раз в час
 ├── scripts/
 │   ├── cost_guard.py         ← учёт платных операций (план/факт)
 │   ├── check_env.py          ← проверка окружения перед запуском
@@ -138,7 +138,7 @@ football-analyzer/
 | Настройка БД | `shared_buffers=256MB`, `max_connections=40`, `listen_addresses=localhost` |
 | Код | `/var/www/football-analyzer-stage` (git, ветка `main`) |
 | Секреты | `/etc/football-analyzer/stage.env` (640 `root:football`) |
-| Сбор расписания | systemd-таймер `football-analyzer-sync.timer`, каждые 15 минут |
+| Сбор расписания | systemd-таймер `football-analyzer-sync.timer`, раз в час |
 | Бот | unit `football-analyzer-stage.service` установлен, **не включён** (нет `BOT_TOKEN`) |
 | Firewall | ufw: наружу открыт **только 22/tcp** |
 | Кэш `soccerdata` | `/var/www/football-analyzer-stage/var/soccerdata` |

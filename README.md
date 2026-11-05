@@ -79,7 +79,7 @@ ssh ... 'sudo -u postgres psql -d football -c "select id, status, rows_seen, row
 ssh ... 'systemctl start football-analyzer-sync.service'
 ```
 
-Сбор расписания идёт **сам каждые 15 минут** (systemd-таймер), бот пока не
+Сбор расписания идёт **сам раз в час** (systemd-таймер), бот пока не
 включён — нужен `BOT_TOKEN` от @BotFather в `/etc/football-analyzer/stage.env`.
 
 ## Статус

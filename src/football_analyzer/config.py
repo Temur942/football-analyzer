@@ -83,8 +83,9 @@ class Settings(BaseSettings):
     def require_bot_token(self) -> str:
         if not self.bot_token:
             raise RuntimeError(
-                "BOT_TOKEN не задан. Для %s это ошибка запуска: "
-                "заполните .env.local (см. .env.example)." % self.app_env
+                "BOT_TOKEN не задан. Для %s это ошибка запуска: заполните "
+                ".env.local локально или /etc/football-analyzer/stage.env на сервере "
+                "(см. .env.example)." % self.app_env
             )
         return self.bot_token
 

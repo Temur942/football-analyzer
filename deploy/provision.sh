@@ -166,8 +166,15 @@ echo "зависимости установлены"
 log "8/8 systemd"
 install -m 644 "$APP_DIR/deploy/football-analyzer-stage.service" \
   /etc/systemd/system/football-analyzer-stage.service
+install -m 644 "$APP_DIR/deploy/football-analyzer-sync.service" \
+  /etc/systemd/system/football-analyzer-sync.service
+install -m 644 "$APP_DIR/deploy/football-analyzer-sync.timer" \
+  /etc/systemd/system/football-analyzer-sync.timer
 systemctl daemon-reload
-echo "unit установлен (не включён: сначала нужен BOT_TOKEN)"
+# Сбор расписания включаем сразу: он не требует токена.
+systemctl enable --now football-analyzer-sync.timer >/dev/null
+echo "таймер сбора расписания включён"
+echo "unit бота установлен (не включён: сначала нужен BOT_TOKEN)"
 
 log "ГОТОВО"
 echo "База: $DB_NAME, пользователь: $DB_USER, host 127.0.0.1"
