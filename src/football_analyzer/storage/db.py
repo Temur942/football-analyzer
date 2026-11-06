@@ -298,3 +298,128 @@ async def stats_progress(pool: asyncpg.Pool) -> dict[str, int]:
             """
         )
     return {key: int(row[key] or 0) for key in ("total", "done", "pending", "failed")}
+
+
+async def finished_matches(
+    pool: asyncpg.Pool, competition_id: str | None = None
+) -> list[asyncpg.Record]:
+    """Завершённые матчи со счётом — материал для модели."""
+    async with pool.acquire() as conn:
+        if competition_id:
+            return await conn.fetch(
+                """
+                SELECT kickoff_utc, home_team, away_team, home_goals, away_goals,
+                       home_goals_ht, away_goals_ht, home_corners, away_corners,
+                       home_yellow, away_yellow, competition_id
+                  FROM matches
+                 WHERE status = 'finished'
+                   AND home_goals IS NOT NULL
+                   AND away_goals IS NOT NULL
+                   AND competition_id = $1
+                 ORDER BY kickoff_utc
+                """,
+                competition_id,
+            )
+        return await conn.fetch(
+            """
+            SELECT kickoff_utc, home_team, away_team, home_goals, away_goals,
+                   home_goals_ht, away_goals_ht, home_corners, away_corners,
+                   home_yellow, away_yellow, competition_id
+              FROM matches
+             WHERE status = 'finished'
+               AND home_goals IS NOT NULL
+               AND away_goals IS NOT NULL
+             ORDER BY kickoff_utc
+            """
+        )
+
+
+async def upcoming_matches(pool: asyncpg.Pool, days: int) -> list[asyncpg.Record]:
+    """Запланированные матчи на ближайшие дни (с названием соревнования)."""
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            """
+            SELECT m.id, m.competition_id, c.name_ru, m.home_team, m.away_team, m.kickoff_utc
+              FROM matches m
+              JOIN competitions c ON c.id = m.competition_id
+             WHERE m.status = 'scheduled'
+               AND m.kickoff_utc >= now()
+               AND m.kickoff_utc <= now() + $1
+             ORDER BY m.kickoff_utc
+            """,
+            timedelta(days=days),
+        )
+
+
+async def teams_without_venue(pool: asyncpg.Pool, limit: int) -> list[asyncpg.Record]:
+    """Команды, для которых ещё не известен город стадиона."""
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            """
+            SELECT DISTINCT ON (m.home_team)
+                   m.home_team AS team, m.source_game_id, c.source_key AS slug
+              FROM matches m
+              JOIN competitions c ON c.id = m.competition_id
+              LEFT JOIN venues v ON v.team = m.home_team
+             WHERE v.team IS NULL
+               AND m.source_game_id IS NOT NULL
+               AND m.status = 'finished'
+             ORDER BY m.home_team, m.kickoff_utc DESC
+             LIMIT $1
+            """,
+            limit,
+        )
+
+
+async def upsert_venue(
+    pool: asyncpg.Pool,
+    team: str,
+    city: str | None,
+    country: str | None,
+    lat: float | None = None,
+    lon: float | None = None,
+) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO venues (team, city, country, lat, lon, updated_at)
+            VALUES ($1, $2, $3, $4, $5, now())
+            ON CONFLICT (team) DO UPDATE SET
+                city = COALESCE(EXCLUDED.city, venues.city),
+                country = COALESCE(EXCLUDED.country, venues.country),
+                lat = COALESCE(EXCLUDED.lat, venues.lat),
+                lon = COALESCE(EXCLUDED.lon, venues.lon),
+                updated_at = now()
+            """,
+            team,
+            city,
+            country,
+            lat,
+            lon,
+        )
+
+
+async def venue_coords(pool: asyncpg.Pool, team: str) -> tuple[float, float] | None:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT lat, lon FROM venues WHERE team = $1 AND lat IS NOT NULL", team
+        )
+    if row is None:
+        return None
+    return float(row["lat"]), float(row["lon"])
+
+
+async def competition_ids(pool: asyncpg.Pool) -> list[str]:
+    """Список соревнований, по которым есть матчи со счётом."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT competition_id, count(*) AS matches
+              FROM matches
+             WHERE status = 'finished' AND home_goals IS NOT NULL
+             GROUP BY competition_id
+            HAVING count(*) >= 100
+             ORDER BY count(*) DESC
+            """
+        )
+    return [row["competition_id"] for row in rows]

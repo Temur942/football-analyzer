@@ -134,3 +134,12 @@ async def fetch_summary(session: aiohttp.ClientSession, slug: str, event_id: str
         if response.status != 200:
             raise RuntimeError("HTTP %d на %s" % (response.status, url))
         return await response.json(content_type=None)
+
+
+def parse_venue(summary: dict) -> tuple[str | None, str | None]:
+    """Город и страна стадиона из gameInfo (координат ESPN не даёт)."""
+    venue = (summary.get("gameInfo") or {}).get("venue") or {}
+    address = venue.get("address") or {}
+    city = address.get("city")
+    country = address.get("country")
+    return (str(city) if city else None, str(country) if country else None)

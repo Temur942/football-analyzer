@@ -13,10 +13,16 @@ import argparse
 import asyncio
 import json
 import logging
+import math
 import sys
+from collections import defaultdict
+from datetime import UTC, datetime
 
 import aiohttp
 
+from football_analyzer.analysis.forecast import build_forecast, render_text
+from football_analyzer.analysis.ratings import MatchRow, fit_rates
+from football_analyzer.analysis.weather import forecast_at, geocode
 from football_analyzer.competitions import active_competitions
 from football_analyzer.config import Settings, get_settings
 from football_analyzer.datasources.espn import ScheduleFetch, fetch_schedule
@@ -25,9 +31,12 @@ from football_analyzer.datasources.espn_stats import (
     fetch_summary,
     has_any_statistics,
     parse_summary,
+    parse_venue,
 )
 from football_analyzer.models import Competition
 from football_analyzer.storage import db
+
+log = logging.getLogger(__name__)
 
 EXIT_OK = 0
 EXIT_PROBLEM = 1
@@ -343,6 +352,251 @@ def cmd_sync_stats(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def to_match_row(row: object) -> MatchRow:
+    return MatchRow(
+        kickoff_utc=row["kickoff_utc"],  # type: ignore[index]
+        home_team=row["home_team"],  # type: ignore[index]
+        away_team=row["away_team"],  # type: ignore[index]
+        home_goals=row["home_goals"],  # type: ignore[index]
+        away_goals=row["away_goals"],  # type: ignore[index]
+        home_goals_ht=row["home_goals_ht"],  # type: ignore[index]
+        away_goals_ht=row["away_goals_ht"],  # type: ignore[index]
+        home_corners=row["home_corners"],  # type: ignore[index]
+        away_corners=row["away_corners"],  # type: ignore[index]
+        home_yellow=row["home_yellow"],  # type: ignore[index]
+        away_yellow=row["away_yellow"],  # type: ignore[index]
+    )
+
+
+async def _sync_venues(dsn: str, limit: int, pause: float) -> tuple[int, int, int]:
+    pool = await db.connect(dsn)
+    saved = geocoded = 0
+    failed = 0
+    try:
+        await db.apply_schema(pool)
+        rows = await db.teams_without_venue(pool, limit)
+        async with aiohttp.ClientSession() as session:
+            for row in rows:
+                try:
+                    data = await fetch_summary(session, row["slug"], str(row["source_game_id"]))
+                    city, country = parse_venue(data)
+                    lat = lon = None
+                    if city:
+                        coords = await geocode(session, city, country)
+                        if coords:
+                            lat, lon = coords
+                            geocoded += 1
+                    await db.upsert_venue(pool, row["team"], city, country, lat, lon)
+                    saved += 1
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("стадион не получен для %s: %s", row["team"], exc)
+                    failed += 1
+                await asyncio.sleep(pause)
+    finally:
+        await pool.close()
+    return saved, geocoded, failed
+
+
+def cmd_sync_venues(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        saved, geocoded, failed = asyncio.run(
+            _sync_venues(settings.require_database_url(), args.limit, args.pause)
+        )
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    print("=" * 60)
+    print("  СТАДИОНЫ")
+    print("=" * 60)
+    print("  Обработано команд:   %d" % saved)
+    print("  Координаты найдены:  %d" % geocoded)
+    print("  Ошибок:              %d" % failed)
+    print("=" * 60)
+    return EXIT_OK
+
+
+async def _predict(
+    dsn: str, days: int, limit: int, weather: bool, competitions: list[str] | None
+) -> list[str]:
+    pool = await db.connect(dsn)
+    texts: list[str] = []
+    try:
+        await db.apply_schema(pool)
+        upcoming = await db.upcoming_matches(pool, days)
+        grouped: dict[str, list] = defaultdict(list)
+        for row in upcoming:
+            grouped[row["competition_id"]].append(row)
+
+        async with aiohttp.ClientSession() as session:
+            for competition_id, rows in grouped.items():
+                if competitions and competition_id not in competitions:
+                    continue
+                finished = [
+                    to_match_row(row) for row in await db.finished_matches(pool, competition_id)
+                ]
+                if len(finished) < 100:
+                    continue
+                rates = fit_rates(finished)
+                for row in rows[:limit]:
+                    home, away = row["home_team"], row["away_team"]
+                    if home not in rates.attack or away not in rates.attack:
+                        continue
+                    factor, note = 1.0, None
+                    if weather:
+                        coords = await db.venue_coords(pool, home)
+                        if coords:
+                            measured = await forecast_at(
+                                session, coords[0], coords[1], row["kickoff_utc"]
+                            )
+                            if measured:
+                                factor, note = measured.factor, measured.note
+                    forecast = build_forecast(
+                        rates,
+                        competition_id=competition_id,
+                        home_team=home,
+                        away_team=away,
+                        kickoff_utc=row["kickoff_utc"],
+                        weather_factor=factor,
+                        weather_note=note,
+                    )
+                    texts.append(render_text(forecast, row["name_ru"]))
+    finally:
+        await pool.close()
+    return texts
+
+
+def cmd_predict(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        texts = asyncio.run(
+            _predict(
+                settings.require_database_url(),
+                args.days,
+                args.limit,
+                args.weather,
+                args.competition,
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    if not texts:
+        print("Нет матчей для прогноза в этом окне (или не хватает истории).")
+        return EXIT_EMPTY
+    print(("\n" + "-" * 60 + "\n").join(texts))
+    return EXIT_OK
+
+
+async def _backtest(dsn: str, before: datetime, min_train: int) -> list[dict]:
+    pool = await db.connect(dsn)
+    results: list[dict] = []
+    try:
+        await db.apply_schema(pool)
+        for competition_id in await db.competition_ids(pool):
+            rows = [to_match_row(r) for r in await db.finished_matches(pool, competition_id)]
+            train = [m for m in rows if m.kickoff_utc < before]
+            test = [m for m in rows if m.kickoff_utc >= before]
+            if len(train) < min_train or len(test) < 20:
+                continue
+            rates = fit_rates(train, now=before)
+            baseline = fit_rates([], now=before)
+            baseline.league_home_goals = rates.league_home_goals
+            baseline.league_away_goals = rates.league_away_goals
+
+            def evaluate(
+                model: object, _test: list = test, _cid: str = competition_id
+            ) -> tuple[float, float, float]:
+                hits = 0
+                log_loss = 0.0
+                brier = 0.0
+                for match in _test:
+                    forecast = build_forecast(
+                        model,  # type: ignore[arg-type]
+                        competition_id=_cid,
+                        home_team=match.home_team,
+                        away_team=match.away_team,
+                        kickoff_utc=match.kickoff_utc,
+                    )
+                    probs = (forecast.p_home, forecast.p_draw, forecast.p_away)
+                    actual = (
+                        0
+                        if match.home_goals > match.away_goals
+                        else (1 if match.home_goals == match.away_goals else 2)
+                    )
+                    if probs.index(max(probs)) == actual:
+                        hits += 1
+                    log_loss -= math.log(max(probs[actual], 1e-9))
+                    over = 1.0 if match.home_goals + match.away_goals > 2.5 else 0.0
+                    brier += (forecast.total[2.5] - over) ** 2
+                n = len(_test)
+                return hits / n, log_loss / n, brier / n
+
+            accuracy, loss, brier = evaluate(rates)
+            base_accuracy, base_loss, base_brier = evaluate(baseline)
+            results.append(
+                {
+                    "competition": competition_id,
+                    "test": len(test),
+                    "accuracy": accuracy,
+                    "base_accuracy": base_accuracy,
+                    "logloss": loss,
+                    "base_logloss": base_loss,
+                    "brier": brier,
+                    "base_brier": base_brier,
+                }
+            )
+    finally:
+        await pool.close()
+    return results
+
+
+def cmd_backtest(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        before = datetime.fromisoformat(args.before).replace(tzinfo=UTC)
+    except ValueError:
+        print("ОШИБКА: --before в формате YYYY-MM-DD", file=sys.stderr)
+        return EXIT_PROBLEM
+    try:
+        results = asyncio.run(_backtest(settings.require_database_url(), before, args.min_train))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+
+    print("=" * 96)
+    print("  БЭКТЕСТ: обучение до %s, проверка после" % args.before)
+    print("=" * 96)
+    print(
+        "  %-24s %6s %9s %9s %9s %9s %8s"
+        % ("соревнование", "матчей", "точность", "база", "logloss", "база", "Brier")
+    )
+    total_test = 0
+    for row in results:
+        total_test += row["test"]
+        print(
+            "  %-24s %6d %8.1f%% %8.1f%% %9.4f %9.4f %8.4f"
+            % (
+                row["competition"][:24],
+                row["test"],
+                row["accuracy"] * 100,
+                row["base_accuracy"] * 100,
+                row["logloss"],
+                row["base_logloss"],
+                row["brier"],
+            )
+        )
+    print("=" * 96)
+    if total_test:
+        mean_acc = sum(r["accuracy"] * r["test"] for r in results) / total_test
+        base_acc = sum(r["base_accuracy"] * r["test"] for r in results) / total_test
+        print(
+            "  Итог по %d матчам: точность %.1f%% против базы %.1f%%"
+            % (total_test, mean_acc * 100, base_acc * 100)
+        )
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -392,6 +646,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_stats.add_argument("--limit", type=int, default=2000, help="сколько матчей за проход")
     p_stats.add_argument("--pause", type=float, default=0.4, help="пауза между запросами")
     p_stats.set_defaults(func=cmd_sync_stats)
+
+    p_venues = sub.add_parser("sync-venues", help="города и координаты стадионов")
+    p_venues.add_argument("--limit", type=int, default=400)
+    p_venues.add_argument("--pause", type=float, default=0.3)
+    p_venues.set_defaults(func=cmd_sync_venues)
+
+    p_predict = sub.add_parser("predict", help="прогноз в процентах на ближайшие матчи")
+    p_predict.add_argument("--days", type=int, default=1)
+    p_predict.add_argument("--limit", type=int, default=3, help="сколько матчей на лигу")
+    p_predict.add_argument("--competition", action="append", default=None)
+    p_predict.add_argument("--weather", action="store_true", help="учесть погоду")
+    p_predict.set_defaults(func=cmd_predict)
+
+    p_backtest = sub.add_parser("backtest", help="проверка модели на прошедших матчах")
+    p_backtest.add_argument("--before", required=True, help="дата отсечки YYYY-MM-DD")
+    p_backtest.add_argument("--min-train", type=int, default=300)
+    p_backtest.set_defaults(func=cmd_backtest)
 
     return parser
 
