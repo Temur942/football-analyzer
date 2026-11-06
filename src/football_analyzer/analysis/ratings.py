@@ -244,9 +244,63 @@ def fit_rates(
         mean_yellow = (rates.league_home_yellow + rates.league_away_yellow) / 2.0
         fill(yellows, rates.attack_yellow, rates.defence_yellow, mean_yellow, prior_matches)
 
+    _calibrate(rates, weighted)
     rates.rho = fit_rho(weighted, rates)
     rates.half_share = estimate_half_share(weighted)
     return rates
+
+
+def _calibrate(rates: Rates, weighted: list[tuple[float, MatchRow]]) -> None:
+    """Согласовать средние прогнозы с фактом.
+
+    Оценки атаки и защиты сжимаются к среднему (prior), и произведение двух
+    сжатых оценок в среднем меньше единицы: модель систематически занижает.
+    Проверено на АПЛ — без калибровки ЖК выходило 3,04 против реальных 3,94.
+    Калибровка домножает средние по лиге так, чтобы средний прогноз совпал
+    с фактом. Делается отдельно для голов, углов и карточек.
+    """
+    if not weighted:
+        return
+
+    def ratio(pairs: list[tuple[float, float, float]]) -> float:
+        predicted = sum(w * p for w, p, _ in pairs)
+        actual = sum(w * a for w, _, a in pairs)
+        if predicted <= 0:
+            return 1.0
+        return actual / predicted
+
+    goal_pairs: list[tuple[float, float, float]] = []
+    for weight, match in weighted:
+        lam_home, lam_away = rates.goals_lambda(match.home_team, match.away_team)
+        goal_pairs.append((weight, lam_home, float(match.home_goals)))
+        goal_pairs.append((weight, lam_away, float(match.away_goals)))
+    goal_factor = ratio(goal_pairs)
+    rates.league_home_goals *= goal_factor
+    rates.league_away_goals *= goal_factor
+
+    corner_pairs: list[tuple[float, float, float]] = []
+    for weight, match in weighted:
+        if match.home_corners is None or match.away_corners is None:
+            continue
+        lam_home, lam_away = rates.corners_lambda(match.home_team, match.away_team)
+        corner_pairs.append((weight, lam_home, float(match.home_corners)))
+        corner_pairs.append((weight, lam_away, float(match.away_corners)))
+    if corner_pairs:
+        corner_factor = ratio(corner_pairs)
+        rates.league_home_corners *= corner_factor
+        rates.league_away_corners *= corner_factor
+
+    yellow_pairs: list[tuple[float, float, float]] = []
+    for weight, match in weighted:
+        if match.home_yellow is None or match.away_yellow is None:
+            continue
+        lam_home, lam_away = rates.yellow_lambda(match.home_team, match.away_team)
+        yellow_pairs.append((weight, lam_home, float(match.home_yellow)))
+        yellow_pairs.append((weight, lam_away, float(match.away_yellow)))
+    if yellow_pairs:
+        yellow_factor = ratio(yellow_pairs)
+        rates.league_home_yellow *= yellow_factor
+        rates.league_away_yellow *= yellow_factor
 
 
 def tau(x: int, y: int, lam_home: float, lam_away: float, rho: float) -> float:
