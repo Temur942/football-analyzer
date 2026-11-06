@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 
 import aiohttp
 
+from football_analyzer.analysis.bridge import build_cross_model
 from football_analyzer.analysis.forecast import build_forecast, render_text
 from football_analyzer.analysis.ratings import MatchRow, fit_rates
 from football_analyzer.analysis.weather import forecast_at, geocode
@@ -428,51 +429,82 @@ def cmd_sync_venues(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+CUP_PREFIXES = ("uefa-", "int-")
+
+
 async def _predict(
     dsn: str, days: int, limit: int, weather: bool, competitions: list[str] | None
 ) -> list[str]:
+    """Прогнозы на ближайшие матчи.
+
+    Для лиговых матчей используется модель своей лиги, для еврокубков — общая
+    модель со «сшивкой» силы лиг (analysis/bridge.py): иначе силу команды из
+    Сегунды нельзя сравнить с командой из АПЛ.
+    """
     pool = await db.connect(dsn)
     texts: list[str] = []
     try:
         await db.apply_schema(pool)
         upcoming = await db.upcoming_matches(pool, days)
-        grouped: dict[str, list] = defaultdict(list)
-        for row in upcoming:
-            grouped[row["competition_id"]].append(row)
+        if not upcoming:
+            return texts
+
+        all_competitions = await db.competition_ids(pool)
+        league_ids = [c for c in all_competitions if not c.startswith(CUP_PREFIXES)]
+        cup_ids = [c for c in all_competitions if c.startswith(CUP_PREFIXES)]
+
+        league_matches = {
+            competition_id: [
+                to_match_row(row) for row in await db.finished_matches(pool, competition_id)
+            ]
+            for competition_id in league_ids
+        }
+        cup_matches = [
+            to_match_row(row)
+            for competition_id in cup_ids
+            for row in await db.finished_matches(pool, competition_id)
+        ]
+
+        cross = build_cross_model(league_matches, cup_matches)
 
         async with aiohttp.ClientSession() as session:
-            for competition_id, rows in grouped.items():
+            per_competition: dict[str, int] = defaultdict(int)
+            for row in upcoming:
+                competition_id = row["competition_id"]
                 if competitions and competition_id not in competitions:
                     continue
-                finished = [
-                    to_match_row(row) for row in await db.finished_matches(pool, competition_id)
-                ]
-                if len(finished) < 100:
+                if per_competition[competition_id] >= limit:
                     continue
-                rates = fit_rates(finished)
-                for row in rows[:limit]:
-                    home, away = row["home_team"], row["away_team"]
-                    if home not in rates.attack or away not in rates.attack:
-                        continue
-                    factor, note = 1.0, None
-                    if weather:
-                        coords = await db.venue_coords(pool, home)
-                        if coords:
-                            measured = await forecast_at(
-                                session, coords[0], coords[1], row["kickoff_utc"]
-                            )
-                            if measured:
-                                factor, note = measured.factor, measured.note
-                    forecast = build_forecast(
-                        rates,
-                        competition_id=competition_id,
-                        home_team=home,
-                        away_team=away,
-                        kickoff_utc=row["kickoff_utc"],
-                        weather_factor=factor,
-                        weather_note=note,
-                    )
-                    texts.append(render_text(forecast, row["name_ru"]))
+
+                if competition_id.startswith(CUP_PREFIXES):
+                    model: object = cross
+                else:
+                    model = cross.league_rates.get(competition_id)
+                if model is None:
+                    continue
+
+                home, away = row["home_team"], row["away_team"]
+                factor, note = 1.0, None
+                if weather:
+                    coords = await db.venue_coords(pool, home)
+                    if coords:
+                        measured = await forecast_at(
+                            session, coords[0], coords[1], row["kickoff_utc"]
+                        )
+                        if measured:
+                            factor, note = measured.factor, measured.note
+
+                forecast = build_forecast(
+                    model,  # type: ignore[arg-type]
+                    competition_id=competition_id,
+                    home_team=home,
+                    away_team=away,
+                    kickoff_utc=row["kickoff_utc"],
+                    weather_factor=factor,
+                    weather_note=note,
+                )
+                texts.append(render_text(forecast, row["name_ru"]))
+                per_competition[competition_id] += 1
     finally:
         await pool.close()
     return texts
