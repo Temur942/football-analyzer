@@ -22,6 +22,9 @@ log = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 SCHEMA_DIR = PROJECT_ROOT / "sql"
 
+# После стольких неудач матч перестаём дёргать: повтор даст тот же ответ.
+MAX_STATS_ATTEMPTS = 3
+
 
 async def connect(dsn: str) -> asyncpg.Pool:
     """Пул соединений. На 2 ГБ RAM хватает 1–5 соединений."""
@@ -90,13 +93,15 @@ async def upsert_fixtures(pool: asyncpg.Pool, fixtures: list[Fixture]) -> tuple[
                 """
                 INSERT INTO matches (
                     competition_id, season, kickoff_utc, home_team, away_team,
-                    status, source, source_game_id, dedupe_key
+                    status, source, source_game_id, dedupe_key, home_goals, away_goals
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 ON CONFLICT (dedupe_key) DO UPDATE SET
                     kickoff_utc = EXCLUDED.kickoff_utc,
                     status = EXCLUDED.status,
                     source_game_id = EXCLUDED.source_game_id,
+                    home_goals = COALESCE(EXCLUDED.home_goals, matches.home_goals),
+                    away_goals = COALESCE(EXCLUDED.away_goals, matches.away_goals),
                     updated_at = now()
                 RETURNING (xmax = 0) AS inserted
                 """,
@@ -109,6 +114,8 @@ async def upsert_fixtures(pool: asyncpg.Pool, fixtures: list[Fixture]) -> tuple[
                 fixture.source,
                 fixture.source_game_id,
                 fixture.dedupe_key,
+                fixture.home_goals,
+                fixture.away_goals,
             )
             if row["inserted"]:
                 new_count += 1
@@ -173,7 +180,7 @@ async def finish_ingest_run(
 
 
 async def pending_stats(
-    pool: asyncpg.Pool, limit: int, max_attempts: int = 3
+    pool: asyncpg.Pool, limit: int, max_attempts: int = MAX_STATS_ATTEMPTS
 ) -> list[asyncpg.Record]:
     """Матчи, у которых ещё нет статистики (возобновляемая выгрузка).
 
@@ -247,6 +254,27 @@ async def mark_stats_error(pool: asyncpg.Pool, match_id: int, error: str) -> Non
             """,
             match_id,
             error[:500],
+        )
+
+
+async def mark_stats_unavailable(pool: asyncpg.Pool, match_id: int, reason: str) -> None:
+    """Источник не хранит статистику по этому матчу — больше не пытаемся.
+
+    Это не сбой сети: ESPN отдаёт boxscore с нулём статистик. Повтор запроса
+    вернёт то же самое, поэтому попытки сразу исчерпываются.
+    """
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE matches
+               SET stats_attempts = $3,
+                   stats_error = $2,
+                   updated_at = now()
+             WHERE id = $1
+            """,
+            match_id,
+            reason[:500],
+            MAX_STATS_ATTEMPTS,
         )
 
 

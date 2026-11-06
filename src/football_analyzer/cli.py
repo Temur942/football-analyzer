@@ -21,7 +21,11 @@ from football_analyzer.competitions import active_competitions
 from football_analyzer.config import Settings, get_settings
 from football_analyzer.datasources.espn import ScheduleFetch, fetch_schedule
 from football_analyzer.datasources.espn_history import discover_season
-from football_analyzer.datasources.espn_stats import fetch_summary, parse_summary
+from football_analyzer.datasources.espn_stats import (
+    fetch_summary,
+    has_any_statistics,
+    parse_summary,
+)
 from football_analyzer.models import Competition
 from football_analyzer.storage import db
 
@@ -292,7 +296,17 @@ async def _sync_stats(dsn: str, limit: int, pause: float) -> tuple[int, int, dic
                         )
                         stats = parse_summary(data, str(row["source_game_id"]))
                         if stats is None or not stats.has_corners_and_cards:
-                            await db.mark_stats_error(pool, row["id"], "в summary нет углов или ЖК")
+                            if has_any_statistics(data):
+                                # Данные есть, но неполные — попробуем позже.
+                                await db.mark_stats_error(
+                                    pool, row["id"], "в summary нет углов или ЖК"
+                                )
+                            else:
+                                # Источник вообще не хранит статистику матча:
+                                # повтор запроса вернёт то же самое.
+                                await db.mark_stats_unavailable(
+                                    pool, row["id"], "источник не даёт статистику"
+                                )
                             failed += 1
                         else:
                             await db.save_stats(pool, row["id"], stats)

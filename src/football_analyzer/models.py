@@ -47,6 +47,8 @@ class Fixture(BaseModel):
     source: str = "ESPN"
     source_game_id: str | None = None
     status: str = "scheduled"
+    home_goals: int | None = None
+    away_goals: int | None = None
     dedupe_key: str = Field(default="")
 
     def model_post_init(self, __context: object) -> None:  # noqa: D105

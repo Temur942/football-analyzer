@@ -117,6 +117,16 @@ def parse_summary(summary: dict, event_id: str) -> MatchStats | None:
     return stats
 
 
+def has_any_statistics(summary: dict) -> bool:
+    """Есть ли в ответе хоть какие-то статистики команд.
+
+    Нужен, чтобы отличить «источник не хранит подробности» (boxscore пустой)
+    от «нам не хватило одного показателя»: в первом случае повторять бессмысленно.
+    """
+    teams = (summary.get("boxscore") or {}).get("teams") or []
+    return any(team.get("statistics") for team in teams)
+
+
 async def fetch_summary(session: aiohttp.ClientSession, slug: str, event_id: str) -> dict:
     """Сырой ответ summary по матчу."""
     url = "%s/%s/summary?event=%s" % (ESPN_API, slug, event_id)

@@ -69,6 +69,20 @@ def parse_event(event: dict, competition: Competition) -> Fixture | None:
 
     state = ((event.get("status") or {}).get("type") or {}).get("state", "pre")
 
+    # Счёт берём прямо из расписания: он есть даже у матчей, по которым ESPN
+    # не хранит подробную статистику (углы/ЖК). Для модели голов это важно.
+    def goal_count(side: dict) -> int | None:
+        value = side.get("score")
+        if value in (None, ""):
+            return None
+        try:
+            return int(float(str(value)))
+        except (TypeError, ValueError):
+            return None
+
+    home_goals = goal_count(home) if state == "post" else None
+    away_goals = goal_count(away) if state == "post" else None
+
     return Fixture(
         competition_id=competition.id,
         season=season_of(kickoff),
@@ -78,6 +92,8 @@ def parse_event(event: dict, competition: Competition) -> Fixture | None:
         source="ESPN",
         source_game_id=str(event.get("id")) if event.get("id") is not None else None,
         status=STATUS_MAP.get(state, "scheduled"),
+        home_goals=home_goals,
+        away_goals=away_goals,
     )
 
 
