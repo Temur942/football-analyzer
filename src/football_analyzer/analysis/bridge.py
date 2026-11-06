@@ -154,6 +154,8 @@ def fit_league_strength(
     league_rates: dict[str, Rates],
     team_league: dict[str, str],
     *,
+    mu_home: float,
+    mu_away: float,
     regularization: float = 8.0,
 ) -> dict[str, float]:
     """Подобрать коэффициенты силы лиг по матчам еврокубков."""
@@ -182,15 +184,17 @@ def fit_league_strength(
         away_rates = league_rates.get(away_league)
         if home_rates is None or away_rates is None:
             continue
-        # Прогноз без силы лиг: средние по лигам уже учтены их собственными
-        # базовыми значениями, поэтому берём отношения к среднему.
+        # Единая база для всех лиг: иначе средние «домашние 1.6 в Бундеслиге»
+        # и «1.4 в Примейре» смешивались бы с коэффициентом силы и удваивали
+        # разницу. Сила лиги должна отвечать только за силу, а не за базовые
+        # средние — они уже учтены в оценках атаки и защиты.
         pred_home = (
-            home_rates.league_home_goals
+            mu_home
             * home_rates.attack.get(match.home_team, 1.0)
             * away_rates.defence.get(match.away_team, 1.0)
         )
         pred_away = (
-            away_rates.league_away_goals
+            mu_away
             * away_rates.attack.get(match.away_team, 1.0)
             * home_rates.defence.get(match.home_team, 1.0)
         )
@@ -244,7 +248,13 @@ def build_cross_model(
     model = CrossRates(
         league_rates=league_rates,
         team_league=team_league,
-        strength=fit_league_strength(cross_matches, league_rates, team_league),
+        strength=fit_league_strength(
+            cross_matches,
+            league_rates,
+            team_league,
+            mu_home=max(mu_home, 0.05),
+            mu_away=max(mu_away, 0.05),
+        ),
         mu_home=max(mu_home, 0.05),
         mu_away=max(mu_away, 0.05),
         league_corners_home={cid: rates.league_home_corners for cid, rates in league_rates.items()},
