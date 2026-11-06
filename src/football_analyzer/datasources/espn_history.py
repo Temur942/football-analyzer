@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 
 import aiohttp
 
@@ -32,6 +33,18 @@ class DiscoveryResult:
     requests: int = 0
     errors: list[str] = field(default_factory=list)
     skipped: str | None = None
+    scanned: bool = False
+
+
+def season_days(season: str) -> list[str]:
+    """Все дни сезона (1 июля — 30 июня) в формате YYYYMMDD."""
+    start_year = int(season.split("-")[0])
+    start = datetime(start_year, 7, 1, tzinfo=UTC).date()
+    end = datetime(start_year + 1, 6, 30, tzinfo=UTC).date()
+    return [
+        (start + timedelta(days=offset)).strftime("%Y%m%d")
+        for offset in range((end - start).days + 1)
+    ]
 
 
 async def discover_season(
@@ -40,6 +53,7 @@ async def discover_season(
     season: str,
     *,
     pause_seconds: float = 0.3,
+    scan_days: bool = False,
 ) -> DiscoveryResult:
     """Собрать матчи соревнования за сезон (например, "2024-2025")."""
     result = DiscoveryResult()
@@ -56,11 +70,17 @@ async def discover_season(
         return result
     result.requests += 1
 
-    if calendar is None:
-        result.skipped = "календарь-диапазон (кубок/сборные) — нужен перебор дат"
+    if calendar is None and not scan_days:
+        result.skipped = "календарь-диапазон (кубок/сборные) — нужен --scan"
         return result
 
-    for day in sorted(calendar):
+    # У кубков ESPN отдаёт диапазон без списка дат: перебираем дни сезона.
+    days = sorted(calendar) if calendar else season_days(season)
+    if calendar is None:
+        result.scanned = True
+        log.info("%s %s: перебор %d дней", competition.id, season, len(days))
+
+    for day in days:
         try:
             events = await fetch_scoreboard(session, competition.espn, day)
         except Exception as exc:  # noqa: BLE001

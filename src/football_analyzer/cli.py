@@ -239,7 +239,11 @@ def cmd_sync_schedule(args: argparse.Namespace) -> int:
 
 
 async def _discover_history(
-    dsn: str, competitions: list[Competition], seasons: list[str], pause: float
+    dsn: str,
+    competitions: list[Competition],
+    seasons: list[str],
+    pause: float,
+    scan_days: bool = False,
 ) -> list[tuple[str, str, int, str]]:
     """Найти прошедшие матчи за сезоны и записать их в базу."""
     pool = await db.connect(dsn)
@@ -251,7 +255,11 @@ async def _discover_history(
             for competition in competitions:
                 for season in seasons:
                     result = await discover_season(
-                        session, competition, season, pause_seconds=pause
+                        session,
+                        competition,
+                        season,
+                        pause_seconds=pause,
+                        scan_days=scan_days,
                     )
                     if result.skipped:
                         rows.append((competition.id, season, 0, "пропущено: " + result.skipped))
@@ -275,7 +283,11 @@ def cmd_discover_history(args: argparse.Namespace) -> int:
     try:
         rows = asyncio.run(
             _discover_history(
-                settings.require_database_url(), competitions, args.season, args.pause
+                settings.require_database_url(),
+                competitions,
+                args.season,
+                args.pause,
+                args.scan,
             )
         )
     except Exception as exc:  # noqa: BLE001
@@ -640,6 +652,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--competition", action="append", default=None, help="только это соревнование"
     )
     p_history.add_argument("--pause", type=float, default=0.3, help="пауза между запросами")
+    p_history.add_argument(
+        "--scan", action="store_true", help="перебирать все дни сезона (для кубков)"
+    )
     p_history.set_defaults(func=cmd_discover_history)
 
     p_stats = sub.add_parser("sync-stats", help="догрузить углы и ЖК по прошедшим матчам")
