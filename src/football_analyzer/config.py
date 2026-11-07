@@ -41,6 +41,20 @@ class Settings(BaseSettings):
 
     log_level: str = Field(default="INFO")
 
+    # --- ЮKassa: подписка ---
+    yookassa_shop_id: str = ""
+    yookassa_secret_key: str = ""
+    yookassa_return_url: str = "https://t.me/footballizator_bot"
+
+    # --- Подписка ---
+    subscription_price_rub: int = Field(default=699, ge=0)
+    subscription_days: int = Field(default=30, ge=1, le=365)
+
+    # --- Рассылка ---
+    # True — считать и писать в журнал, но не отправлять (нужно, пока нет
+    # доступа к Telegram). False — реальная отправка.
+    delivery_dry_run: bool = True
+
     cost_prices: str = Field(default="config/prices.json")
     cost_ledger: str = Field(default="var/cost-ledger.sqlite3")
     budget_max_per_run_rub: float = Field(default=0.0, ge=0)
@@ -71,6 +85,19 @@ class Settings(BaseSettings):
         """Путь из настроек → абсолютный путь (относительные считаются от корня)."""
         path = Path(relative)
         return path if path.is_absolute() else PROJECT_ROOT / path
+
+    @property
+    def yookassa_configured(self) -> bool:
+        return bool(self.yookassa_shop_id and self.yookassa_secret_key)
+
+    def require_yookassa(self) -> tuple[str, str]:
+        """shopId и секрет. Без них оплату принимать нельзя."""
+        if not self.yookassa_configured:
+            raise RuntimeError(
+                "ЮKassa не настроена: задайте YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY "
+                "в .env.local (локально) или /etc/football-analyzer/stage.env (сервер)."
+            )
+        return self.yookassa_shop_id, self.yookassa_secret_key
 
     def require_database_url(self) -> str:
         if not self.database_url:
