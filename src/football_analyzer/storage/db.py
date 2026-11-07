@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import asyncpg
@@ -587,3 +587,10 @@ async def record_consent(pool: asyncpg.Pool, chat_id: int, username: str | None)
             username,
             CONSENT_VERSION,
         )
+
+
+async def subscription_until(pool: asyncpg.Pool, chat_id: int) -> datetime | None:
+    """До какого срока действует подписка (None — подписки нет)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT paid_until FROM subscribers WHERE chat_id = $1", chat_id)
+    return row["paid_until"] if row else None

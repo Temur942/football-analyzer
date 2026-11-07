@@ -41,6 +41,7 @@ def main_menu() -> InlineKeyboardMarkup:
     builder.button(text="📊 Прогноз на сегодня", callback_data="today")
     builder.button(text="💳 Тарифы и подписка", callback_data=CALLBACK_TARIFFS)
     builder.button(text="ℹ️ Как это работает", callback_data="about")
+    builder.button(text="⭐ Моя подписка", callback_data="my_subscription")
     builder.button(text="📄 Документы", callback_data="docs_menu")
     builder.adjust(1)
     return builder.as_markup()
@@ -198,6 +199,22 @@ def doc_nav() -> InlineKeyboardMarkup:
     builder.button(text="✖️ Закрыть", callback_data="docs_close")
     builder.adjust(2)
     return builder.as_markup()
+
+
+@router.callback_query(F.data == "my_subscription")
+async def handle_my_subscription(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
+    """Статус подписки: до какого числа действует или что её нет."""
+    if not isinstance(callback.message, Message):
+        await callback.answer()
+        return
+    paid_until = None
+    if pool is not None:
+        try:
+            paid_until = await db.subscription_until(pool, callback.from_user.id)
+        except Exception as exc:  # noqa: BLE001
+            log.error("не удалось получить подписку: %s", exc)
+    await callback.message.answer(subscription_text(paid_until), reply_markup=tariffs_menu())
+    await callback.answer()
 
 
 @router.callback_query(F.data.in_({"docs_menu", "docs_list"}))
