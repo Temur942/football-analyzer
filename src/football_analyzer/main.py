@@ -60,6 +60,13 @@ async def main() -> None:
         except Exception as exc:  # noqa: BLE001
             log.error("база недоступна, работаем без неё: %s", exc)
 
+    if pool is not None:
+        # Отметка «жив» сразу: иначе мониторинг считает бота мёртвым первые 10 минут.
+        try:
+            await db.beat(pool)
+        except Exception as exc:  # noqa: BLE001
+            log.error("не удалось записать стартовый пульс: %s", exc)
+
     dispatcher = Dispatcher(pool=pool)
     # Доступ закрыт для всех, кроме админов и подписчиков (до подключения оплаты).
     dispatcher.message.middleware(AccessMiddleware(pool))
