@@ -20,12 +20,28 @@
 # =============================================================================
 set -euo pipefail
 
+# Окружение передаётся первым аргументом: stage (по умолчанию) или prod.
+# Стейджу и проду — разные каталоги, разные базы, разные юниты systemd.
+APP_ENV_NAME="${1:-stage}"
+case "$APP_ENV_NAME" in
+  stage)
+    APP_DIR=/var/www/football-analyzer-stage
+    DB_NAME=football
+    ;;
+  prod)
+    APP_DIR=/var/www/football-analyzer-prod
+    DB_NAME=football_prod
+    ;;
+  *)
+    echo "ОШИБКА: окружение должно быть stage или prod" >&2
+    exit 1
+    ;;
+esac
+
 APP_USER=football
-APP_DIR=/var/www/football-analyzer-stage
 REPO=https://github.com/Temur942/football-analyzer.git
 CONF_DIR=/etc/football-analyzer
-ENV_FILE="$CONF_DIR/stage.env"
-DB_NAME=football
+ENV_FILE="$CONF_DIR/$APP_ENV_NAME.env"
 DB_USER=football
 
 log() { printf '\n=== %s ===\n' "$*"; }
@@ -105,7 +121,7 @@ if [ -f "$ENV_FILE" ]; then
 else
   cat > "$ENV_FILE" <<EOF
 # Секреты стейджа football-analyzer. Права 640 root:$APP_USER, в git не попадает.
-APP_ENV=stage
+APP_ENV=$APP_ENV_NAME
 DB_PASSWORD=$DB_PASSWORD
 DATABASE_URL=postgresql://$DB_USER:$DB_PASSWORD@127.0.0.1:5432/$DB_NAME?sslmode=disable
 # Токен от @BotFather: заполнить перед запуском бота.
@@ -164,24 +180,39 @@ echo "зависимости установлены"
 
 # --------------------------------------------------------------------------- #
 log "8/10 systemd"
-install -m 644 "$APP_DIR/deploy/football-analyzer-stage.service" \
-  /etc/systemd/system/football-analyzer-stage.service
-install -m 644 "$APP_DIR/deploy/football-analyzer-sync.service" \
-  /etc/systemd/system/football-analyzer-sync.service
-install -m 644 "$APP_DIR/deploy/football-analyzer-sync.timer" \
-  /etc/systemd/system/football-analyzer-sync.timer
-install -m 644 "$APP_DIR/deploy/football-analyzer-deliver.service" \
-  /etc/systemd/system/football-analyzer-deliver.service
-install -m 644 "$APP_DIR/deploy/football-analyzer-deliver.timer" \
-  /etc/systemd/system/football-analyzer-deliver.timer
-systemctl daemon-reload
-# Сбор расписания включаем сразу: он не требует токена.
-systemctl enable --now football-analyzer-sync.timer >/dev/null
-systemctl enable --now football-analyzer-deliver.timer >/dev/null
-echo "таймеры сбора расписания и рассылки включены"
-echo "unit бота установлен (не включён: сначала нужен BOT_TOKEN)"
+# Имена юнитов: стейдж без суффикса, прод с -prod. Содержимое подставляется
+# из шаблонов репозитория: пути, env-файл и ссылки между юнитами.
+suffix=""
+[ "$APP_ENV_NAME" = "prod" ] && suffix="-prod"
 
-# --------------------------------------------------------------------------- #
+install_unit() {
+  local src="$1" name="$2"
+  sed -e "s#/var/www/football-analyzer-stage#${APP_DIR}#g" \
+      -e "s#/etc/football-analyzer/stage.env#${ENV_FILE}#g" \
+      -e "s#^Description=#Description=[${APP_ENV_NAME}] #" \
+      "$src" > "/etc/systemd/system/${name}"
+  chmod 644 "/etc/systemd/system/${name}"
+}
+
+install_unit "$APP_DIR/deploy/football-analyzer-stage.service" "football-analyzer-stage${suffix}.service"
+install_unit "$APP_DIR/deploy/football-analyzer-sync.service" "football-analyzer-sync${suffix}.service"
+install_unit "$APP_DIR/deploy/football-analyzer-sync.timer" "football-analyzer-sync${suffix}.timer"
+install_unit "$APP_DIR/deploy/football-analyzer-deliver.service" "football-analyzer-deliver${suffix}.service"
+install_unit "$APP_DIR/deploy/football-analyzer-deliver.timer" "football-analyzer-deliver${suffix}.timer"
+
+# Таймеры должны запускать свои же сервисы (иначе прод запустит стейдж).
+for unit in /etc/systemd/system/football-analyzer-*${suffix}.timer; do
+  sed -i "s#football-analyzer-sync.service#football-analyzer-sync${suffix}.service#g" "$unit"
+  sed -i "s#football-analyzer-deliver.service#football-analyzer-deliver${suffix}.service#g" "$unit"
+done
+
+systemctl daemon-reload
+# Сбор расписания и рассылка не требуют токена — включаем сразу.
+systemctl enable --now "football-analyzer-sync${suffix}.timer" >/dev/null
+systemctl enable --now "football-analyzer-deliver${suffix}.timer" >/dev/null
+echo "таймеры ${APP_ENV_NAME} включены (расписание, рассылка)"
+echo "unit бота установлен (не включён: нужен доступ к Telegram)"
+
 log "9/10 доступ: только по ключу"
 # Парольный вход выключаем ПОСЛЕ того, как убедились, что ключ работает
 # (скрипт запускается по SSH с ключом — иначе он бы сюда не дошёл).
@@ -209,14 +240,21 @@ fi
 # --------------------------------------------------------------------------- #
 log "10/10 резервные копии базы"
 install -m 755 "$APP_DIR/deploy/football-db-backup.sh" /usr/local/bin/football-db-backup.sh
-install -m 644 "$APP_DIR/deploy/football-db-backup.service" /etc/systemd/system/
-install -m 644 "$APP_DIR/deploy/football-db-backup.timer" /etc/systemd/system/
+install_unit "$APP_DIR/deploy/football-db-backup.service" "football-db-backup${suffix}.service"
+install_unit "$APP_DIR/deploy/football-db-backup.timer" "football-db-backup${suffix}.timer"
+if [ "$APP_ENV_NAME" = "prod" ]; then
+  # Прод-база называется иначе: передаём имя и префикс файлов дампа.
+  sed -i "/^\[Service\]/a Environment=DB_NAME=${DB_NAME}\nEnvironment=PREFIX=${DB_NAME}" \
+    "/etc/systemd/system/football-db-backup${suffix}.service"
+fi
+sed -i "s#football-db-backup.service#football-db-backup${suffix}.service#g" \
+  "/etc/systemd/system/football-db-backup${suffix}.timer"
 systemctl daemon-reload
-systemctl enable --now football-db-backup.timer >/dev/null
-echo "таймер бэкапа включён (ежедневно 03:30 UTC, хранение 7 дней)"
+systemctl enable --now "football-db-backup${suffix}.timer" >/dev/null
+echo "таймер бэкапа ${APP_ENV_NAME} включён (ежедневно 03:30 UTC)"
 
 log "ГОТОВО"
 echo "База: $DB_NAME, пользователь: $DB_USER, host 127.0.0.1"
 echo "Окружение: $ENV_FILE"
 echo "Код: $APP_DIR"
-echo "Проверка: sudo -u $APP_USER $APP_DIR/.venv/bin/python -m football_analyzer.cli fetch-schedule --days 1"
+echo "Проверка: sudo -u $APP_USER env DATABASE_URL=\"\$(grep ^DATABASE_URL= $ENV_FILE | cut -d= -f2-)\" $APP_DIR/.venv/bin/python -m football_analyzer.cli sync-schedule --days 1"

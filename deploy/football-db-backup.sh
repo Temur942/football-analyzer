@@ -12,9 +12,11 @@
 # =============================================================================
 set -euo pipefail
 
-BACKUP_DIR=/var/backups/football
-DB_NAME=football
-KEEP_DAYS=7
+BACKUP_DIR=${BACKUP_DIR:-/var/backups/football}
+# Позволяет обслуживать несколько баз (стейдж и прод) одним скриптом.
+DB_NAME=${DB_NAME:-football}
+PREFIX=${PREFIX:-football}
+KEEP_DAYS=${KEEP_DAYS:-7}
 
 # Каталог принадлежит postgres: дамп создаёт он же, поэтому файл ему же
 # и читается при восстановлении. Проверено на практике: дамп от root
@@ -22,7 +24,7 @@ KEEP_DAYS=7
 install -d -m 700 -o postgres -g postgres "$BACKUP_DIR"
 
 STAMP=$(date -u +%Y%m%dT%H%M%SZ)
-FILE="$BACKUP_DIR/football-$STAMP.dump"
+FILE="$BACKUP_DIR/$PREFIX-$STAMP.dump"
 
 # Дамп от имени postgres: у роли football может не быть прав на чтение всех схем.
 # -f вместо ">" — тогда файл создаёт сам postgres и он же сможет его прочитать.
@@ -47,6 +49,6 @@ fi
 echo "копия создана: $FILE ($SIZE байт)"
 
 # Ротация: удаляем старше KEEP_DAYS дней.
-DELETED=$(find "$BACKUP_DIR" -name 'football-*.dump' -mtime +"$KEEP_DAYS" -print -delete | wc -l)
+DELETED=$(find "$BACKUP_DIR" -name "$PREFIX-*.dump" -mtime +"$KEEP_DAYS" -print -delete | wc -l)
 echo "удалено старых копий: $DELETED"
-echo "всего копий: $(find "$BACKUP_DIR" -name 'football-*.dump' | wc -l)"
+echo "всего копий: $(find "$BACKUP_DIR" -name "$PREFIX-*.dump" | wc -l)"
