@@ -141,9 +141,16 @@ async def deliver_due(
             try:
                 await send(chat_id, text)
             except Exception as exc:  # noqa: BLE001
+                # Важно: запись в журнал НЕ создаём. Иначе ключ (матч, чат)
+                # занят статусом failed, и прогноз не уйдёт уже никогда —
+                # сетевая ошибка превратилась бы в потерянное сообщение.
                 report.failed += 1
-                await db.try_insert_delivery(pool, row["id"], chat_id, "failed", str(exc)[:300])
-                log.warning("отправка не удалась (чат %s, матч %s): %s", chat_id, row["id"], exc)
+                log.warning(
+                    "отправка не удалась (чат %s, матч %s), повторим позже: %s",
+                    chat_id,
+                    row["id"],
+                    exc,
+                )
                 continue
             inserted = await db.try_insert_delivery(pool, row["id"], chat_id, "sent")
             if inserted:
