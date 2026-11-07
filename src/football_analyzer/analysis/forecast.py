@@ -23,6 +23,12 @@ from football_analyzer.analysis.ratings import Rates
 
 MSK = ZoneInfo("Europe/Moscow")
 
+# В еврокубках модель почти не различает эти линии (Brier ≈ 0.25, как у
+# «всегда 50%» по бэктесту 08.11.2026) — показывать их нельзя: это продажа
+# шума как знания.
+CUP_PREFIXES = ("uefa-", "int-")
+HIDDEN_CUP_LINES = {"corners": 8.5, "yellow": 3.5}
+
 GOAL_LINES = (1.5, 2.5, 3.5)
 HALF_LINES = (0.5, 1.5)
 TEAM_LINES = (0.5, 1.5)
@@ -136,6 +142,18 @@ def render_text(forecast: Forecast, competition_name: str | None = None) -> str:
     title = forecast.home_team + " — " + forecast.away_team
     kickoff = forecast.kickoff_utc.astimezone(MSK)
 
+    is_cup = forecast.competition_id.startswith(CUP_PREFIXES)
+    corners = {
+        line: value
+        for line, value in forecast.corners.items()
+        if not (is_cup and line == HIDDEN_CUP_LINES["corners"])
+    }
+    yellow = {
+        line: value
+        for line, value in forecast.yellow.items()
+        if not (is_cup and line == HIDDEN_CUP_LINES["yellow"])
+    }
+
     scores = " · ".join(
         "<b>%d:%d</b> %s" % (home, away, _pct(probability))
         for home, away, probability in forecast.scores
@@ -165,10 +183,10 @@ def render_text(forecast: Forecast, competition_name: str | None = None) -> str:
         "▫️ Гости: " + _lines(forecast.away_goals),
         "",
         "🚩 <b>Угловые</b>",
-        _lines(forecast.corners),
+        _lines(corners),
         "",
         "🟨 <b>Жёлтые карточки</b>",
-        _lines(forecast.yellow),
+        _lines(yellow),
     ]
     if forecast.weather_note:
         blocks += ["", "🌦 <b>Погода:</b> " + forecast.weather_note]
