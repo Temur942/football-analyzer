@@ -509,3 +509,25 @@ async def delivery_stats(pool: asyncpg.Pool) -> dict[str, int]:
             """
         )
     return {key: int(row[key] or 0) for key in ("sent", "dry_run", "failed")}
+
+
+async def latest_prediction(pool: asyncpg.Pool) -> str | None:
+    """Текстовый прогноз по ближайшему матчу — для кнопки «Прогноз на сегодня»."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT m.home_team, m.away_team, m.kickoff_utc
+              FROM predictions p
+              JOIN matches m ON m.id = p.match_id
+             WHERE m.kickoff_utc > now()
+             ORDER BY m.kickoff_utc
+             LIMIT 1
+            """
+        )
+    if row is None:
+        return None
+    return "%s — %s\\n%s UTC" % (
+        row["home_team"],
+        row["away_team"],
+        row["kickoff_utc"].strftime("%d.%m %H:%M"),
+    )

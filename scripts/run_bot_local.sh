@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# =============================================================================
+# run_bot_local.sh — запуск бота на машине разработчика с базой на сервере.
+#
+# Зачем: с сервера в РФ Telegram недоступен. Если на машине разработчика есть
+# доступ к Telegram (например, включён VPN), бот можно поднять локально, а базу
+# брать с сервера через SSH-туннель — данные те же, ничего копировать не надо.
+#
+# Секреты не печатаются и не сохраняются в файлы: токен и DSN читаются с
+# сервера на время запуска.
+#
+# Использование:
+#   bash scripts/run_bot_local.sh          # запуск
+#   bash scripts/run_bot_local.sh --check  # только проверить доступ к Telegram
+# =============================================================================
+set -euo pipefail
+
+KEY="${KEY:-$HOME/.ssh/football_analyzer_deploy}"
+SERVER="${SERVER:-root@168.113.176.166}"
+LOCAL_PORT="${LOCAL_PORT:-15432}"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+if ! curl -s -o /dev/null -m 10 https://api.telegram.org/; then
+  echo "ОШИБКА: Telegram недоступен с этой машины." >&2
+  echo "Без доступа к api.telegram.org бот не запустится — это сеть, а не код." >&2
+  echo "Проверьте: curl -s -o /dev/null -w '%{http_code}\\n' https://api.telegram.org/" >&2
+  exit 1
+fi
+echo "Telegram доступен"
+
+if [ "${1:-}" = "--check" ]; then
+  echo "Проверка пройдена, запуск не запрошен."
+  exit 0
+fi
+
+# --- данные с сервера (в вывод не попадают) ---------------------------------
+DB_URL=$(ssh -i "$KEY" -o BatchMode=yes "$SERVER" 'grep "^DATABASE_URL=" /etc/football-analyzer/stage.env | cut -d= -f2-')
+BOT_TOKEN=$(ssh -i "$KEY" -o BatchMode=yes "$SERVER" 'grep "^BOT_TOKEN=" /etc/football-analyzer/stage.env | cut -d= -f2-')
+
+if [ -z "$BOT_TOKEN" ]; then
+  echo "ОШИБКА: BOT_TOKEN пуст в env-файле сервера" >&2
+  exit 1
+fi
+
+# Пробрасываем порт базы на локальную машину.
+ssh -i "$KEY" -N -L "${LOCAL_PORT}:127.0.0.1:5432" "$SERVER" &
+TUNNEL_PID=$!
+trap 'kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
+sleep 2
+
+export DATABASE_URL="${DB_URL/@127.0.0.1:5432/@127.0.0.1:${LOCAL_PORT}}"
+export BOT_TOKEN
+export APP_ENV=local
+export DELIVERY_DRY_RUN=true
+
+cd "$ROOT"
+exec .venv/bin/python -m football_analyzer.main

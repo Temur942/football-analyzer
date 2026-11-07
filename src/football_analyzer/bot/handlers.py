@@ -1,34 +1,169 @@
-"""Хендлеры aiogram: команды бота.
+"""Хендлеры бота: меню, тариф, пример прогноза, подписка.
 
-Статус: минимальный набор. Рассылка прогнозов появится в scheduler/.
+Тексты и клавиатуры вынесены в чистые функции, чтобы их можно было проверить
+без подключения к Telegram: сеть для этого не нужна.
 """
 
 from __future__ import annotations
 
-from aiogram import Router
+import logging
+from datetime import UTC, datetime
+
+import asyncpg
+from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
-from aiogram.types import Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    Message,
+)
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from football_analyzer.config import get_settings
+from football_analyzer.storage import db
 
-router = Router(name="basic")
+log = logging.getLogger(__name__)
+router = Router(name="main")
+
+CALLBACK_TARIFFS = "tariffs"
+CALLBACK_BUY = "buy"
+CALLBACK_SUBSCRIPTION = "subscription"
+CALLBACK_BACK = "back"
+
+
+def main_menu() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📊 Прогноз на сегодня", callback_data="today")
+    builder.button(text="💳 Тарифы и подписка", callback_data=CALLBACK_TARIFFS)
+    builder.button(text="ℹ️ Как это работает", callback_data="about")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def tariffs_menu() -> InlineKeyboardMarkup:
+    settings = get_settings()
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="Оформить за %d ₽/мес" % settings.subscription_price_rub,
+        callback_data=CALLBACK_BUY,
+    )
+    builder.button(text="⬅️ В меню", callback_data=CALLBACK_BACK)
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def start_text() -> str:
+    settings = get_settings()
+    return (
+        "⚽ <b>Football Analyzer</b>\n\n"
+        "Математический анализ футбольных матчей: вероятности голов, угловых "
+        "и карточек по 20 соревнованиям.\n\n"
+        "Это не советы для ставок, а расчёт вероятностей по истории матчей.\n\n"
+        "Подписка — <b>%d ₽ в месяц</b>.\n\n"
+        "Выберите действие:" % settings.subscription_price_rub
+    )
+
+
+def tariffs_text() -> str:
+    settings = get_settings()
+    return (
+        "💳 <b>Подписка</b>\n\n"
+        "• Прогнозы за 5 часов до каждого матча\n"
+        "• 20 соревнований: топ-5 лиг, вторые дивизионы, еврокубки\n"
+        "• Тоталы, исходы, счёт, индивидуальные тоталы, углы, ЖК — в процентах\n"
+        "• Отмена в любой момент\n\n"
+        "<b>Цена: %d ₽ за %d дней</b>\n\n"
+        "Оплата: ЮKassa (карты РФ)." % (settings.subscription_price_rub, settings.subscription_days)
+    )
+
+
+def about_text() -> str:
+    return (
+        "ℹ️ <b>Как это работает</b>\n\n"
+        "1. Бот круглосуточно следит за расписанием матчей.\n"
+        "2. По истории матчей считает силы команд и вероятности событий.\n"
+        "3. За 5 часов до игры присылает прогноз в процентах.\n\n"
+        "Модель считает вероятности, а не гарантирует результат: "
+        "любой матч может закончиться иначе.\n\n"
+        "18+. Это аналитика, не призыв к ставкам."
+    )
+
+
+def buy_text() -> str:
+    settings = get_settings()
+    return (
+        "🧾 <b>Оформление подписки</b>\n\n"
+        "%d ₽ за %d дней.\n\n"
+        "Оплата через ЮKassa: карты РФ, СБП.\n"
+        "Подключение оплаты — на финальном шаге, сейчас тариф показан "
+        "для проверки интерфейса." % (settings.subscription_price_rub, settings.subscription_days)
+    )
+
+
+def subscription_text(paid_until: datetime | None) -> str:
+    if paid_until is None or paid_until <= datetime.now(tz=UTC):
+        return (
+            "🔓 <b>Подписка не активна</b>\n\n"
+            "Оформите подписку, чтобы получать прогнозы за 5 часов до матча."
+        )
+    return "✅ <b>Подписка активна</b> до %s" % paid_until.strftime("%d.%m.%Y")
 
 
 @router.message(CommandStart())
 async def handle_start(message: Message) -> None:
-    settings = get_settings()
-    await message.answer(
-        "Привет! Это football-analyzer.\n\n"
-        "Я слежу за расписанием матчей и присылаю математические прогнозы "
-        "за %d ч до начала игры." % settings.forecast_lead_hours
-    )
+    await message.answer(start_text(), reply_markup=main_menu())
 
 
 @router.message(Command("help"))
 async def handle_help(message: Message) -> None:
-    await message.answer(
-        "Доступные команды:\n"
-        "/start — начать\n"
-        "/help — эта справка\n\n"
-        "Список лиг и формат прогноза уточняются."
-    )
+    await message.answer(about_text(), reply_markup=main_menu())
+
+
+@router.message(Command("tariffs"))
+async def handle_tariffs(message: Message) -> None:
+    await message.answer(tariffs_text(), reply_markup=tariffs_menu())
+
+
+@router.callback_query(F.data == CALLBACK_TARIFFS)
+async def handle_tariffs_button(callback: CallbackQuery) -> None:
+    if callback.message:
+        await callback.message.answer(tariffs_text(), reply_markup=tariffs_menu())
+    await callback.answer()
+
+
+@router.callback_query(F.data == CALLBACK_BUY)
+async def handle_buy(callback: CallbackQuery) -> None:
+    if callback.message:
+        await callback.message.answer(buy_text(), reply_markup=tariffs_menu())
+    await callback.answer("Оплата подключается")
+
+
+@router.callback_query(F.data == "about")
+async def handle_about(callback: CallbackQuery) -> None:
+    if callback.message:
+        await callback.message.answer(about_text(), reply_markup=main_menu())
+    await callback.answer()
+
+
+@router.callback_query(F.data == CALLBACK_BACK)
+async def handle_back(callback: CallbackQuery) -> None:
+    if callback.message:
+        await callback.message.answer(start_text(), reply_markup=main_menu())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "today")
+async def handle_today(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
+    """Ближайший матч с уже посчитанным прогнозом.
+
+    Пул приходит от Dispatcher(pool=...) — aiogram подставляет его по имени
+    параметра. Если базы нет, бот всё равно отвечает.
+    """
+    text = "Пока нет рассчитанных прогнозов. Они появятся перед матчами."
+    if pool is not None:
+        row = await db.latest_prediction(pool)
+        if row is not None:
+            text = "📊 <b>Свежий прогноз</b>\n\n" + row
+    if callback.message:
+        await callback.message.answer(text, reply_markup=main_menu())
+    await callback.answer()

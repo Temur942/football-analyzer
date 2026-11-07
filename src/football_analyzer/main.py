@@ -18,6 +18,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from football_analyzer import __version__
 from football_analyzer.bot import handlers
 from football_analyzer.config import get_settings
+from football_analyzer.storage import db
 
 log = logging.getLogger(__name__)
 
@@ -43,7 +44,14 @@ async def main() -> None:
         token=settings.require_bot_token(),
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
-    dispatcher = Dispatcher()
+    # База не обязательна для интерфейса: без неё бот отвечает, но не
+    # показывает прогнозы. Так проще проверять интерфейс на машине без БД.
+    pool = None
+    if settings.database_url:
+        pool = await db.connect(settings.require_database_url())
+        log.info("подключение к базе установлено")
+
+    dispatcher = Dispatcher(pool=pool)
     dispatcher.include_router(handlers.router)
 
     scheduler = AsyncIOScheduler(timezone="UTC")
@@ -57,6 +65,8 @@ async def main() -> None:
     finally:
         scheduler.shutdown(wait=False)
         await bot.session.close()
+        if pool is not None:
+            await pool.close()
 
 
 def run() -> None:
