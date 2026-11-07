@@ -133,7 +133,7 @@ football-analyzer/
 |---|---|---|
 | Локальное | машина разработчика | разработка и проверка |
 | Стейдж | VDS FirstVDS, `/var/www/football-analyzer-stage` | обязательная проверка перед продом |
-| Прод | тот же VDS, пока не создан | боевой бот |
+| Прод | тот же VDS, `/var/www/football-analyzer-prod` | боевой конвейер (бот ждёт доступ к Telegram) |
 
 **Факты по серверу (проверено 05.11.2026):**
 
@@ -153,6 +153,8 @@ football-analyzer/
 | SSH | только по ключу; вход по паролю и root-пароль отключены (`00-football.conf`) |
 | Бэкапы БД | `football-db-backup.timer`, ежедневно 03:30 UTC, хранение 7 дней; восстановление проверено |
 | Кэш `soccerdata` | `/var/www/football-analyzer-stage/var/soccerdata` |
+| Прод | `/var/www/football-analyzer-prod`, база `football_prod`, env `/etc/football-analyzer/prod.env`, юниты с суффиксом `-prod` |
+| Прод-таймеры | `football-analyzer-sync-prod.timer`, `football-analyzer-deliver-prod.timer`, `football-db-backup-prod.timer` |
 
 **Правила:**
 
@@ -324,5 +326,6 @@ ssh ... 'journalctl -u football-analyzer-sync -n 30 --no-pager'
    затем `setup-client.sh`, проверка `curl` к api.telegram.org и запуск бота.
    Оговорка: юридическую часть (согласия, уведомление в Роскомнадзор) туннель не
    отменяет — данные всё равно уходят в зарубежный сервис Telegram.
-2. **Прод:** второго экземпляра пока нет; когда понадобится — отдельные каталог,
-   порт, база и юнит, и только по отдельной команде.
+2. **Прод-бот:** окружение и конвейер развёрнуты, но бот не включён — нужен
+   постоянный доступ к Telegram (узел-туннель). После него: включить
+   `football-analyzer-stage-prod.service` и проверить `getMe`.
