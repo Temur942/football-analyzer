@@ -531,3 +531,19 @@ async def latest_prediction(pool: asyncpg.Pool) -> str | None:
         row["away_team"],
         row["kickoff_utc"].strftime("%d.%m %H:%M"),
     )
+
+
+async def has_active_subscription(pool: asyncpg.Pool, chat_id: int) -> bool:
+    """Есть ли у пользователя действующая подписка."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT 1 FROM subscribers
+             WHERE chat_id = $1
+               AND is_active
+               AND paid_until IS NOT NULL
+               AND paid_until > now()
+            """,
+            chat_id,
+        )
+    return row is not None

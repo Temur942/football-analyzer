@@ -17,6 +17,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from football_analyzer import __version__
 from football_analyzer.bot import handlers
+from football_analyzer.bot.access import AccessMiddleware
 from football_analyzer.config import get_settings
 from football_analyzer.storage import db
 
@@ -52,7 +53,11 @@ async def main() -> None:
         log.info("подключение к базе установлено")
 
     dispatcher = Dispatcher(pool=pool)
+    # Доступ закрыт для всех, кроме админов и подписчиков (до подключения оплаты).
+    dispatcher.message.middleware(AccessMiddleware(pool))
+    dispatcher.callback_query.middleware(AccessMiddleware(pool))
     dispatcher.include_router(handlers.router)
+    log.info("закрытая бета: %s, админов: %d", settings.closed_beta, len(settings.admin_ids))
 
     scheduler = AsyncIOScheduler(timezone="UTC")
     # TODO(AGENTS.md §10): добавить задание «проверить расписание и отправить

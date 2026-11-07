@@ -19,6 +19,7 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from football_analyzer.bot.access import BETA_TEXT
 from football_analyzer.config import get_settings
 from football_analyzer.storage import db
 
@@ -110,13 +111,31 @@ def subscription_text(paid_until: datetime | None) -> str:
 
 
 @router.message(CommandStart())
-async def handle_start(message: Message) -> None:
+async def handle_start(message: Message, has_access: bool = True) -> None:
+    if not has_access:
+        # Закрытая бета: показываем свой ID, чтобы владелец мог добавить
+        # человека в админы вручную.
+        user_id = message.from_user.id if message.from_user else 0
+        await message.answer(BETA_TEXT % user_id)
+        return
     await message.answer(start_text(), reply_markup=main_menu())
 
 
+@router.message(Command("myid"))
+async def handle_myid(message: Message) -> None:
+    """Показать свой Telegram ID — нужен, чтобы выдать доступ."""
+    user = message.from_user
+    if user is None:
+        return
+    await message.answer(
+        "Ваш ID: <code>%d</code>\nUsername: %s"
+        % (user.id, "@" + user.username if user.username else "—")
+    )
+
+
 @router.message(Command("help"))
-async def handle_help(message: Message) -> None:
-    await message.answer(about_text(), reply_markup=main_menu())
+async def handle_help(message: Message, has_access: bool = True) -> None:
+    await message.answer(about_text(), reply_markup=main_menu() if has_access else None)
 
 
 @router.message(Command("tariffs"))

@@ -36,6 +36,8 @@ fi
 # --- данные с сервера (в вывод не попадают) ---------------------------------
 DB_URL=$(ssh -i "$KEY" -o BatchMode=yes "$SERVER" 'grep "^DATABASE_URL=" /etc/football-analyzer/stage.env | cut -d= -f2-')
 BOT_TOKEN=$(ssh -i "$KEY" -o BatchMode=yes "$SERVER" 'grep "^BOT_TOKEN=" /etc/football-analyzer/stage.env | cut -d= -f2-')
+BOT_ADMIN_IDS=$(ssh -i "$KEY" -o BatchMode=yes "$SERVER" 'grep "^BOT_ADMIN_IDS=" /etc/football-analyzer/stage.env | cut -d= -f2-')
+CLOSED_BETA=$(ssh -i "$KEY" -o BatchMode=yes "$SERVER" 'grep "^CLOSED_BETA=" /etc/football-analyzer/stage.env | cut -d= -f2-')
 
 if [ -z "$BOT_TOKEN" ]; then
   echo "ОШИБКА: BOT_TOKEN пуст в env-файле сервера" >&2
@@ -50,6 +52,8 @@ sleep 2
 
 export DATABASE_URL="${DB_URL/@127.0.0.1:5432/@127.0.0.1:${LOCAL_PORT}}"
 export BOT_TOKEN
+export BOT_ADMIN_IDS="${BOT_ADMIN_IDS:-}"
+export CLOSED_BETA="${CLOSED_BETA:-true}"
 export APP_ENV=local
 export DELIVERY_DRY_RUN=true
 

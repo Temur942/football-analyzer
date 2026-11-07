@@ -27,6 +27,9 @@ class Settings(BaseSettings):
 
     bot_token: str = Field(default="", description="токен Telegram-бота")
     bot_admin_ids: str = Field(default="", description="ID админов через запятую")
+    # Закрытая бета: пускаем только админов и подписчиков. Выключить, когда
+    # оплата заработает и бот откроется всем.
+    closed_beta: bool = True
 
     # PostgreSQL на сервере (решение заказчика). Секрет: только .env.local или
     # EnvironmentFile systemd, в git не попадает.
