@@ -759,3 +759,41 @@ async def referral_bonus(pool: asyncpg.Pool, invited_chat_id: int, days: int = 7
         return None
     await grant_days(pool, int(referrer), days)
     return int(referrer)
+
+
+async def set_source(pool: asyncpg.Pool, chat_id: int, source: str) -> None:
+    """Запомнить источник привлечения (?start=ch_<код>)."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO subscribers (chat_id, source)
+            VALUES ($1, $2)
+            ON CONFLICT (chat_id) DO UPDATE SET
+                source = COALESCE(subscribers.source, EXCLUDED.source),
+                updated_at = now()
+            """,
+            chat_id,
+            source,
+        )
+
+
+async def start_trial(pool: asyncpg.Pool, chat_id: int, days: int = 3) -> datetime | None:
+    """Дать пробный доступ один раз. None — если уже использован."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT trial_used FROM subscribers WHERE chat_id = $1", chat_id)
+        if row and row["trial_used"]:
+            return None
+        result = await conn.fetchrow(
+            """
+            INSERT INTO subscribers (chat_id, paid_until, trial_used)
+            VALUES ($1, now() + $2, TRUE)
+            ON CONFLICT (chat_id) DO UPDATE SET
+                paid_until = GREATEST(coalesce(subscribers.paid_until, now()), now()) + $2,
+                trial_used = TRUE,
+                updated_at = now()
+            RETURNING paid_until
+            """,
+            chat_id,
+            timedelta(days=days),
+        )
+    return result["paid_until"]

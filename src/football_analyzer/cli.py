@@ -16,7 +16,7 @@ import logging
 import math
 import sys
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import aiohttp
@@ -982,6 +982,154 @@ def cmd_grant_days(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _accuracy(dsn: str, days: int) -> dict:
+    """Точность модели за последние N дней: обучение до окна, проверка внутри.
+
+    Честный out-of-sample: проверочные матчи модель не видела. Считаем по всем
+    прогнозам, а не только по «уверенным», — иначе выйдет цифра с отбором.
+    """
+    pool = await db.connect(dsn)
+    try:
+        await db.apply_schema(pool)
+        competitions = await db.competition_ids(pool)
+        league_ids = [c for c in competitions if not c.startswith(CUP_PREFIXES)]
+        cup_ids = [c for c in competitions if c.startswith(CUP_PREFIXES)]
+        league_rows = {
+            cid: [to_match_row(r) for r in await db.finished_matches(pool, cid)]
+            for cid in league_ids
+        }
+        cup_rows = [
+            (cid, to_match_row(r)) for cid in cup_ids for r in await db.finished_matches(pool, cid)
+        ]
+    finally:
+        await pool.close()
+
+    now = datetime.now(tz=UTC)
+    cutoff = now - timedelta(days=days)
+    train_leagues = {
+        cid: [m for m in rows if m.kickoff_utc < cutoff] for cid, rows in league_rows.items()
+    }
+    model = build_cross_model(
+        train_leagues,
+        [match for _, match in cup_rows if match.kickoff_utc < cutoff],
+        now=cutoff,
+    )
+
+    test = [
+        (cid, match)
+        for cid, rows in league_rows.items()
+        for match in rows
+        if cutoff <= match.kickoff_utc <= now
+    ] + [pair for pair in cup_rows if cutoff <= pair[1].kickoff_utc <= now]
+
+    stats: dict[str, dict[str, int]] = {}
+    confident: dict[str, dict[str, int]] = {}
+
+    def add(bucket: dict, name: str, probability: float, hit: bool) -> None:
+        row = bucket.setdefault(name, {"n": 0, "hits": 0})
+        row["n"] += 1
+        row["hits"] += 1 if hit else 0
+
+    for cid, match in test:
+        if match.home_goals is None or match.away_goals is None:
+            continue
+        rates = model if cid.startswith(CUP_PREFIXES) else model.league_rates.get(cid)
+        if rates is None:
+            continue
+        if model.team_league.get(match.home_team) is None:
+            continue
+        if model.team_league.get(match.away_team) is None:
+            continue
+        forecast = build_forecast(
+            rates,  # type: ignore[arg-type]
+            competition_id=cid,
+            home_team=match.home_team,
+            away_team=match.away_team,
+            kickoff_utc=match.kickoff_utc,
+        )
+
+        if match.home_goals > match.away_goals:
+            actual_outcome = 0
+        elif match.home_goals == match.away_goals:
+            actual_outcome = 1
+        else:
+            actual_outcome = 2
+        outcomes = (forecast.p_home, forecast.p_draw, forecast.p_away)
+        pick = max(range(3), key=lambda index: outcomes[index])
+        probability = outcomes[pick]
+        hit = pick == actual_outcome
+        add(stats, "исход", probability, hit)
+        if probability >= 0.6:
+            add(confident, "исход", probability, hit)
+
+        total_goals = match.home_goals + match.away_goals
+        probability = forecast.total[2.5]
+        hit = (total_goals > 2.5) == (probability > 0.5)
+        add(stats, "тотал 2,5", probability, hit)
+        if probability >= 0.6 or probability <= 0.4:
+            add(confident, "тотал 2,5", probability, hit)
+
+        if match.home_corners is not None and match.away_corners is not None:
+            corners = match.home_corners + match.away_corners
+            probability = forecast.corners[9.5]
+            hit = (corners > 9.5) == (probability > 0.5)
+            add(stats, "углы 9,5", probability, hit)
+            if probability >= 0.6 or probability <= 0.4:
+                add(confident, "углы 9,5", probability, hit)
+
+        if match.home_yellow is not None and match.away_yellow is not None:
+            cards = match.home_yellow + match.away_yellow
+            probability = forecast.yellow[4.5]
+            hit = (cards > 4.5) == (probability > 0.5)
+            add(stats, "ЖК 4,5", probability, hit)
+            if probability >= 0.6 or probability <= 0.4:
+                add(confident, "ЖК 4,5", probability, hit)
+
+    def summarize(bucket: dict) -> dict:
+        return {
+            name: {
+                "n": value["n"],
+                "hits": value["hits"],
+                "rate": round(value["hits"] / value["n"], 4) if value["n"] else 0.0,
+            }
+            for name, value in bucket.items()
+        }
+
+    return {
+        "generated_at": now.isoformat(),
+        "window_days": days,
+        "markets": summarize(stats),
+        "confident": summarize(confident),
+    }
+
+
+def cmd_accuracy(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        report = asyncio.run(_accuracy(settings.require_database_url(), args.days))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+
+    print("=" * 70)
+    print("  ТОЧНОСТЬ МОДЕЛИ за %d дней" % report["window_days"])
+    print("=" * 70)
+    print("  %-12s %8s %8s %10s" % ("рынок", "матчей", "попало", "доля"))
+    for name, value in report["markets"].items():
+        print("  %-12s %8d %8d %9.1f%%" % (name, value["n"], value["hits"], value["rate"] * 100))
+    print("  — только уверенные (>=60% или <=40%):")
+    for name, value in report["confident"].items():
+        print("  %-12s %8d %8d %9.1f%%" % (name, value["n"], value["hits"], value["rate"] * 100))
+    print("=" * 70)
+
+    if args.json:
+        path = Path(args.json)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        print("  записано в %s" % path)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -1087,6 +1235,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_grant.add_argument("--chat-id", type=int, required=True)
     p_grant.add_argument("--days", type=int, default=30)
     p_grant.set_defaults(func=cmd_grant_days)
+
+    p_acc = sub.add_parser("accuracy", help="точность модели за последние N дней")
+    p_acc.add_argument("--days", type=int, default=30)
+    p_acc.add_argument("--json", default="docs/landing/accuracy.json")
+    p_acc.set_defaults(func=cmd_accuracy)
 
     return parser
 

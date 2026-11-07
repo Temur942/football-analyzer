@@ -24,13 +24,17 @@ from football_analyzer.analysis.forecast import build_forecast, render_text
 from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models
 from football_analyzer.bot.access import BETA_TEXT, CONSENT_TEXT
 from football_analyzer.bot.docs import DOCUMENTS, delete_messages, send_document
-from football_analyzer.config import get_settings
 from football_analyzer.storage import db
 
 log = logging.getLogger(__name__)
 router = Router(name="main")
 
 CALLBACK_TARIFFS = "tariffs"
+# Тарифы: срок в днях, цена в рублях. Вход 149 ₽ снимает страх первой
+# покупки — у конкурента (FlashStats) 7 дней стоят 99 ₽, 30 дней 299 ₽.
+TARIFFS: tuple[tuple[int, int], ...] = ((7, 149), (30, 499), (90, 1199))
+TRIAL_DAYS = 3
+
 CALLBACK_BUY = "buy"
 CALLBACK_PAY = "pay"
 CALLBACK_SUBSCRIPTION = "subscription"
@@ -69,40 +73,44 @@ def docs_menu() -> InlineKeyboardMarkup:
 
 
 def tariffs_menu() -> InlineKeyboardMarkup:
-    settings = get_settings()
     builder = InlineKeyboardBuilder()
-    builder.button(
-        text="Оформить за %d ₽/мес" % settings.subscription_price_rub,
-        callback_data=CALLBACK_BUY,
-    )
+    for days, price in TARIFFS:
+        builder.button(text="%d дней — %d ₽" % (days, price), callback_data="buy:%d" % days)
     builder.button(text="⬅️ В меню", callback_data=CALLBACK_BACK)
     builder.adjust(1)
     return builder.as_markup()
 
 
 def start_text() -> str:
-    settings = get_settings()
     return (
         "⚽ <b>Football Analyzer</b>\n\n"
         "Математический анализ футбольных матчей: вероятности голов, угловых "
         "и карточек по 20 соревнованиям.\n\n"
         "Это не советы для ставок, а расчёт вероятностей по истории матчей.\n\n"
-        "Подписка — <b>%d ₽ в месяц</b>.\n\n"
-        "Выберите действие:" % settings.subscription_price_rub
+        "Подписка — от <b>%d ₽</b>, первые %d дня бесплатно.\n\n"
+        "Выберите действие:" % (TARIFFS[0][1], TRIAL_DAYS)
     )
 
 
 def tariffs_text() -> str:
-    settings = get_settings()
-    return (
-        "💳 <b>Подписка</b>\n\n"
-        "• Прогнозы за 5 часов до каждого матча\n"
-        "• 20 соревнований: топ-5 лиг, вторые дивизионы, еврокубки\n"
-        "• Тоталы, исходы, счёт, индивидуальные тоталы, углы, ЖК — в процентах\n"
-        "• Отмена в любой момент\n\n"
-        "<b>Цена: %d ₽ за %d дней</b>\n\n"
-        "Оплата: ЮKassa (карты РФ)." % (settings.subscription_price_rub, settings.subscription_days)
-    )
+    lines = [
+        "💳 <b>Подписка</b>",
+        "",
+        "• Прогнозы за 5 часов до каждого матча",
+        "• 20 соревнований: топ-5 лиг, вторые дивизионы, еврокубки",
+        "• Тоталы, исходы, счёт, индивидуальные тоталы, углы, ЖК — в процентах",
+        "• Автопродления нет: срок кончился — ничего не списывается",
+        "",
+        "<b>Тарифы</b>",
+    ]
+    for days, price in TARIFFS:
+        lines.append("▫️ %d дней — <b>%d ₽</b> (%.0f ₽/день)" % (days, price, price / days))
+    lines += [
+        "",
+        "Первые %d дня — <b>бесплатно</b>, чтобы проверить." % TRIAL_DAYS,
+        "Оплата: ЮKassa (карты РФ, СБП).",
+    ]
+    return "\n".join(lines)
 
 
 def about_text() -> str:
@@ -117,28 +125,30 @@ def about_text() -> str:
     )
 
 
-def order_text() -> str:
+def tariff(days: int) -> tuple[int, int]:
+    """Найти тариф по сроку. Неизвестный срок — основной тариф."""
+    for known_days, price in TARIFFS:
+        if known_days == days:
+            return known_days, price
+    return TARIFFS[1]
+
+
+def order_text(days: int = 30, price: int = 499) -> str:
     """Экран заказа: товар, срок, цена и кнопка оплаты."""
-    settings = get_settings()
     return (
         "🧾 <b>Оформление заказа</b>\n\n"
         "Товар: подписка «Прогнозы на футбол»\n"
         "Срок: <b>%d дней</b>\n"
         "Цена: <b>%d ₽</b>\n\n"
         "Оплата: ЮKassa — карты РФ, СБП.\n"
-        "Доступ откроется сразу после оплаты, продление — по желанию.\n\n"
-        "18+. Аналитика, не призыв к ставкам."
-        % (settings.subscription_days, settings.subscription_price_rub)
+        "Доступ откроется сразу после оплаты, автопродления нет.\n\n"
+        "18+. Аналитика, не призыв к ставкам." % (days, price)
     )
 
 
-def order_menu() -> InlineKeyboardMarkup:
-    settings = get_settings()
+def order_menu(days: int = 30, price: int = 499) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(
-        text="💳 Оплатить %d ₽" % settings.subscription_price_rub,
-        callback_data=CALLBACK_PAY,
-    )
+    builder.button(text="💳 Оплатить %d ₽" % price, callback_data="pay:%d" % days)
     builder.button(text="⬅️ К тарифам", callback_data=CALLBACK_TARIFFS)
     builder.adjust(1)
     return builder.as_markup()
@@ -161,6 +171,13 @@ async def _event(pool: asyncpg.Pool | None, chat_id: int, name: str) -> None:
         await db.log_event(pool, chat_id, name)
     except Exception as exc:  # noqa: BLE001
         log.error("не удалось записать событие %s: %s", name, exc)
+
+
+def _source_from(payload: str | None) -> str | None:
+    """Источник привлечения из ?start=ch_<код>."""
+    if not payload or not payload.startswith("ch_"):
+        return None
+    return payload.removeprefix("ch_")[:32]
 
 
 def _referrer_from(payload: str | None) -> int | None:
@@ -194,6 +211,12 @@ async def handle_start(
                 )
         except Exception as exc:  # noqa: BLE001
             log.error("не удалось записать пригласившего: %s", exc)
+    source = _source_from(command.args if command else None)
+    if source is not None and pool is not None:
+        try:
+            await db.set_source(pool, user.id, source)
+        except Exception as exc:  # noqa: BLE001
+            log.error("не удалось записать источник: %s", exc)
     await _event(pool, user.id, "start")
 
     if not has_consent:
@@ -212,12 +235,20 @@ async def handle_start(
 async def handle_consent_yes(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
     user = callback.from_user
     await _event(pool, user.id, "consent")
+    trial_until = None
     if pool is not None:
         try:
             await db.record_consent(pool, user.id, user.username)
+            trial_until = await db.start_trial(pool, user.id, TRIAL_DAYS)
         except Exception as exc:  # noqa: BLE001
             log.error("не удалось записать согласие: %s", exc)
     if callback.message:
+        if trial_until is not None:
+            await callback.message.answer(
+                "🎁 <b>Пробный доступ на %d дня</b> — до %s.\n"
+                "Проверьте прогнозы и решите, нужна ли подписка."
+                % (TRIAL_DAYS, trial_until.strftime("%d.%m.%Y"))
+            )
         await callback.message.answer(start_text(), reply_markup=main_menu())
     await callback.answer("Согласие сохранено")
 
@@ -394,25 +425,29 @@ async def handle_tariffs_button(callback: CallbackQuery, pool: asyncpg.Pool | No
     await callback.answer()
 
 
-@router.callback_query(F.data == CALLBACK_BUY)
+@router.callback_query(F.data.startswith("buy:"))
 async def handle_buy(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
     await _event(pool, callback.from_user.id, "buy_click")
+    days = int((callback.data or "buy:30").split(":")[1])
+    days, price = tariff(days)
     if callback.message:
-        await callback.message.answer(order_text(), reply_markup=order_menu())
+        await callback.message.answer(order_text(days, price), reply_markup=order_menu(days, price))
     await callback.answer()
 
 
-@router.callback_query(F.data == CALLBACK_PAY)
+@router.callback_query(F.data.startswith("pay:"))
 async def handle_pay(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
     await _event(pool, callback.from_user.id, "pay_click")
-    # Здесь будет вызов ЮKassa: создание платежа и ссылка на оплату.
+    days = int((callback.data or "pay:30").split(":")[1])
+    days, price = tariff(days)
     if callback.message:
         await callback.message.answer(
-            "Оплата ещё не включена: заявка в ЮKassa на проверке.\n"
-            "Как только платёж заработает, эта кнопка откроет страницу оплаты.",
-            reply_markup=order_menu(),
+            "💳 <b>Оплата %d ₽</b>\n\n"
+            "Платёжный сервис подключается — ЮKassa на модерации.\n"
+            "Пока могу выдать доступ вручную: напишите @khid71." % price,
+            reply_markup=order_menu(days, price),
         )
-    await callback.answer("Оплата подключается")
+    await callback.answer()
 
 
 @router.callback_query(F.data == "about")

@@ -53,7 +53,7 @@ class Settings(BaseSettings):
     yookassa_return_url: str = "https://t.me/footballizator_bot"
 
     # --- Подписка ---
-    subscription_price_rub: int = Field(default=699, ge=0)
+    subscription_price_rub: int = Field(default=499, ge=0)
     subscription_days: int = Field(default=30, ge=1, le=365)
 
     # --- Рассылка ---
