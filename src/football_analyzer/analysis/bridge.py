@@ -426,6 +426,18 @@ def build_cross_model(
     # У кубков свежесть важнее: состав лиг и темпы меняются быстрее,
     # чем в домашнем чемпионате.
     _calibrate_cup_bases(model, cross_matches, now=now, half_life_days=min(half_life_days, 90.0))
+    model.corner_model = _fit_market_model(
+        model,
+        [m for m in cross_matches if m.home_corners is not None],
+        kind="corners",
+        lines=CORNER_LINES,
+    )
+    model.yellow_model = _fit_market_model(
+        model,
+        [m for m in cross_matches if m.home_yellow is not None],
+        kind="yellow",
+        lines=YELLOW_LINES,
+    )
 
     if model.strength:
         ordered = sorted(model.strength.items(), key=lambda item: item[1], reverse=True)
