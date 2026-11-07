@@ -27,8 +27,14 @@ MAX_STATS_ATTEMPTS = 3
 
 
 async def connect(dsn: str) -> asyncpg.Pool:
-    """Пул соединений. На 2 ГБ RAM хватает 1–5 соединений."""
-    return await asyncpg.create_pool(dsn=dsn, min_size=1, max_size=5, command_timeout=30)
+    """Пул соединений. На 2 ГБ RAM хватает 1–5 соединений.
+
+    min_size=0: пул не держит «пол» открытых соединений и не пытается
+    переподключаться в фоне, если база временно недоступна (например, рвётся
+    SSH-туннель при переключении сети). Ошибки в лог не сыплются, а функции,
+    которым нужна база, просто получат исключение.
+    """
+    return await asyncpg.create_pool(dsn=dsn, min_size=0, max_size=5, command_timeout=30)
 
 
 async def apply_schema(pool: asyncpg.Pool, directory: Path = SCHEMA_DIR) -> list[Path]:

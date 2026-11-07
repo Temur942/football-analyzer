@@ -47,10 +47,15 @@ async def main() -> None:
     )
     # База не обязательна для интерфейса: без неё бот отвечает, но не
     # показывает прогнозы. Так проще проверять интерфейс на машине без БД.
+    # База нужна для прогнозов и подписок, но её недоступность не должна
+    # ронять бота: интерфейс и закрытая бета работают и без неё.
     pool = None
     if settings.database_url:
-        pool = await db.connect(settings.require_database_url())
-        log.info("подключение к базе установлено")
+        try:
+            pool = await db.connect(settings.require_database_url())
+            log.info("подключение к базе установлено")
+        except Exception as exc:  # noqa: BLE001
+            log.error("база недоступна, работаем без неё: %s", exc)
 
     dispatcher = Dispatcher(pool=pool)
     # Доступ закрыт для всех, кроме админов и подписчиков (до подключения оплаты).

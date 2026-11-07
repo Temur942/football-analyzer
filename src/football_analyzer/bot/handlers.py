@@ -28,6 +28,7 @@ router = Router(name="main")
 
 CALLBACK_TARIFFS = "tariffs"
 CALLBACK_BUY = "buy"
+CALLBACK_PAY = "pay"
 CALLBACK_SUBSCRIPTION = "subscription"
 CALLBACK_BACK = "back"
 
@@ -90,15 +91,31 @@ def about_text() -> str:
     )
 
 
-def buy_text() -> str:
+def order_text() -> str:
+    """Экран заказа: товар, срок, цена и кнопка оплаты."""
     settings = get_settings()
     return (
-        "🧾 <b>Оформление подписки</b>\n\n"
-        "%d ₽ за %d дней.\n\n"
-        "Оплата через ЮKassa: карты РФ, СБП.\n"
-        "Подключение оплаты — на финальном шаге, сейчас тариф показан "
-        "для проверки интерфейса." % (settings.subscription_price_rub, settings.subscription_days)
+        "🧾 <b>Оформление заказа</b>\n\n"
+        "Товар: подписка «Прогнозы на футбол»\n"
+        "Срок: <b>%d дней</b>\n"
+        "Цена: <b>%d ₽</b>\n\n"
+        "Оплата: ЮKassa — карты РФ, СБП.\n"
+        "Доступ откроется сразу после оплаты, продление — по желанию.\n\n"
+        "18+. Аналитика, не призыв к ставкам."
+        % (settings.subscription_days, settings.subscription_price_rub)
     )
+
+
+def order_menu() -> InlineKeyboardMarkup:
+    settings = get_settings()
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text="💳 Оплатить %d ₽" % settings.subscription_price_rub,
+        callback_data=CALLBACK_PAY,
+    )
+    builder.button(text="⬅️ К тарифам", callback_data=CALLBACK_TARIFFS)
+    builder.adjust(1)
+    return builder.as_markup()
 
 
 def subscription_text(paid_until: datetime | None) -> str:
@@ -153,7 +170,19 @@ async def handle_tariffs_button(callback: CallbackQuery) -> None:
 @router.callback_query(F.data == CALLBACK_BUY)
 async def handle_buy(callback: CallbackQuery) -> None:
     if callback.message:
-        await callback.message.answer(buy_text(), reply_markup=tariffs_menu())
+        await callback.message.answer(order_text(), reply_markup=order_menu())
+    await callback.answer()
+
+
+@router.callback_query(F.data == CALLBACK_PAY)
+async def handle_pay(callback: CallbackQuery) -> None:
+    # Здесь будет вызов ЮKassa: создание платежа и ссылка на оплату.
+    if callback.message:
+        await callback.message.answer(
+            "Оплата ещё не включена: заявка в ЮKassa на проверке.\n"
+            "Как только платёж заработает, эта кнопка откроет страницу оплаты.",
+            reply_markup=order_menu(),
+        )
     await callback.answer("Оплата подключается")
 
 

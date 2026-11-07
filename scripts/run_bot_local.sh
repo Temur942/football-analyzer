@@ -45,10 +45,23 @@ if [ -z "$BOT_TOKEN" ]; then
 fi
 
 # Пробрасываем порт базы на локальную машину.
-ssh -i "$KEY" -N -L "${LOCAL_PORT}:127.0.0.1:5432" "$SERVER" &
+ssh -i "$KEY" -N \
+    -o ExitOnForwardFailure=yes \
+    -o ServerAliveInterval=15 \
+    -o ServerAliveCountMax=3 \
+    -L "${LOCAL_PORT}:127.0.0.1:5432" "$SERVER" &
 TUNNEL_PID=$!
 trap 'kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
-sleep 2
+
+# Ждём, пока туннель реально начнёт принимать соединения: 2 секунды сна
+# оказалось мало — бот падал на подключении к базе.
+for attempt in $(seq 1 20); do
+  if (echo > "/dev/tcp/127.0.0.1/${LOCAL_PORT}") >/dev/null 2>&1; then
+    echo "туннель к базе готов (порт ${LOCAL_PORT})"
+    break
+  fi
+  sleep 1
+done
 
 export DATABASE_URL="${DB_URL/@127.0.0.1:5432/@127.0.0.1:${LOCAL_PORT}}"
 export BOT_TOKEN

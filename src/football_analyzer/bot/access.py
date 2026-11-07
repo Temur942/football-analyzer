@@ -68,6 +68,22 @@ class AccessMiddleware(BaseMiddleware):
         data["has_access"] = has_access
         data["is_admin"] = user.id in admin_ids
 
+        # Диагностика: видно, что именно пришло и что мы решили. Без этого
+        # «бот молчит» не отличить от «бот не получил сообщение».
+        kind = (
+            "callback:" + str(getattr(event, "data", ""))
+            if isinstance(event, CallbackQuery)
+            else "message:" + str(getattr(event, "text", ""))
+        )
+        log.info(
+            "update от id=%s (%s) | %s | доступ=%s админ=%s",
+            user.id,
+            user.username,
+            kind[:60],
+            has_access,
+            user.id in admin_ids,
+        )
+
         if has_access:
             return await handler(event, data)
 
