@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 
 from scipy.optimize import minimize
 
+from football_analyzer.analysis.poisson import poisson_over
 from football_analyzer.analysis.ratings import MatchRow, Rates, fit_rates
 
 log = logging.getLogger(__name__)
@@ -47,6 +48,11 @@ class CrossRates:
     cup_corners_away: float = 4.6
     cup_yellow_home: float = 2.2
     cup_yellow_away: float = 2.4
+
+    # Калибровка вероятностей по линиям (Platt): около 50% модель смещена,
+    # сигмоида на линию это лечит без новых данных.
+    corner_calibration: dict[float, tuple[float, float]] = field(default_factory=dict)
+    yellow_calibration: dict[float, tuple[float, float]] = field(default_factory=dict)
 
     def _league(self, team: str) -> str | None:
         return self.team_league.get(team)
@@ -222,6 +228,83 @@ def fit_league_strength(
     return {league: math.exp(value) for league, value in zip(leagues, values, strict=True)}
 
 
+CORNER_LINES = (8.5, 9.5, 10.5)
+YELLOW_LINES = (3.5, 4.5, 5.5)
+
+
+def _logit(value: float) -> float:
+    value = min(max(value, 1e-6), 1 - 1e-6)
+    return math.log(value / (1 - value))
+
+
+def _sigmoid(value: float) -> float:
+    if value >= 0:
+        return 1.0 / (1.0 + math.exp(-value))
+    exponent = math.exp(value)
+    return exponent / (1.0 + exponent)
+
+
+def apply_calibration(
+    table: dict[float, tuple[float, float]], line: float, probability: float
+) -> float:
+    """Скорректировать вероятность по линии. Без калибровки вернуть как есть."""
+    params = table.get(line)
+    if not params:
+        return probability
+    a, b = params
+    return _sigmoid(a * _logit(probability) + b)
+
+
+def _fit_market_calibration(
+    model: CrossRates,
+    rows: list[MatchRow],
+    *,
+    kind: str,
+    lines: tuple[float, ...],
+) -> dict[float, tuple[float, float]]:
+    """Подобрать a и b для P_over по каждой линии (Platt scaling)."""
+    result: dict[float, tuple[float, float]] = {}
+    if not rows:
+        return result
+
+    def lam(match: MatchRow) -> tuple[float, float]:
+        if kind == "corners":
+            return model.corners_lambda(match.home_team, match.away_team)
+        return model.yellow_lambda(match.home_team, match.away_team)
+
+    def actual(match: MatchRow) -> float:
+        if kind == "corners":
+            return (match.home_corners or 0) + (match.away_corners or 0)
+        return (match.home_yellow or 0) + (match.away_yellow or 0)
+
+    for line in lines:
+        pairs: list[tuple[float, float]] = []
+        for match in rows:
+            home_rate, away_rate = lam(match)
+            pairs.append(
+                (poisson_over(home_rate + away_rate, line), 1.0 if actual(match) > line else 0.0)
+            )
+        if len(pairs) < 50:
+            continue
+
+        def make_nll(values: list[tuple[float, float]]):  # noqa: ANN202
+            def negative_log_likelihood(params: list[float]) -> float:
+                a, b = params
+                total = 0.0
+                for probability, outcome in values:
+                    q = _sigmoid(a * _logit(probability) + b)
+                    q = min(max(q, 1e-9), 1 - 1e-9)
+                    total -= outcome * math.log(q) + (1 - outcome) * math.log(1 - q)
+                return total
+
+            return negative_log_likelihood
+
+        fit = minimize(make_nll(pairs), [1.0, 0.0], method="L-BFGS-B")
+        if fit.success:
+            result[line] = (float(fit.x[0]), float(fit.x[1]))
+    return result
+
+
 def _calibrate_cup_bases(
     model: CrossRates,
     cross_matches: list[MatchRow],
@@ -333,6 +416,18 @@ def build_cross_model(
         model.half_share = first.half_share
 
     _calibrate_cup_bases(model, cross_matches, now=now, half_life_days=half_life_days)
+    model.corner_calibration = _fit_market_calibration(
+        model,
+        [m for m in cross_matches if m.home_corners is not None],
+        kind="corners",
+        lines=CORNER_LINES,
+    )
+    model.yellow_calibration = _fit_market_calibration(
+        model,
+        [m for m in cross_matches if m.home_yellow is not None],
+        kind="yellow",
+        lines=YELLOW_LINES,
+    )
 
     if model.strength:
         ordered = sorted(model.strength.items(), key=lambda item: item[1], reverse=True)

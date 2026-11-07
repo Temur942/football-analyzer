@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from football_analyzer.analysis.bridge import apply_calibration
 from football_analyzer.analysis.poisson import (
     outcome_probs,
     poisson_over,
@@ -109,10 +110,20 @@ def build_forecast(
         home_goals={line: team_over(matrix, "home", line) for line in TEAM_LINES},
         away_goals={line: team_over(matrix, "away", line) for line in TEAM_LINES},
         corners={
-            line: poisson_over(lam_corner_home + lam_corner_away, line) for line in CORNER_LINES
+            line: apply_calibration(
+                getattr(rates, "corner_calibration", {}) or {},
+                line,
+                poisson_over(lam_corner_home + lam_corner_away, line),
+            )
+            for line in CORNER_LINES
         },
         yellow={
-            line: poisson_over(lam_yellow_home + lam_yellow_away, line) for line in YELLOW_LINES
+            line: apply_calibration(
+                getattr(rates, "yellow_calibration", {}) or {},
+                line,
+                poisson_over(lam_yellow_home + lam_yellow_away, line),
+            )
+            for line in YELLOW_LINES
         },
         scores=top_scores(matrix, 3),
         weather_note=weather_note,
