@@ -106,6 +106,42 @@ async def build_forecast_post(pool: asyncpg.Pool) -> str | None:
     return None
 
 
+def accuracy_post(report: dict) -> str:
+    """Пост с публичной точностью. Закрывает главный вопрос «а оно работает?»."""
+    markets = report.get("markets") or {}
+    confident = (report.get("confident") or {}).get("исход") or {}
+    lines = [
+        "📊 <b>Точность за %d дней</b>" % report.get("window_days", 30),
+        "",
+        "Считаем на матчах, которых модель не видела.",
+        "",
+    ]
+    names = {"исход": "Исход", "тотал 2,5": "Тотал 2,5", "углы 9,5": "Углы 9,5", "ЖК 4,5": "ЖК 4,5"}
+    for key, title in names.items():
+        value = markets.get(key)
+        if not value:
+            continue
+        lines.append(
+            "▫️ %s — <b>%.1f%%</b> (%d из %d)"
+            % (title, value["rate"] * 100, value["hits"], value["n"])
+        )
+    if confident:
+        lines += [
+            "",
+            "Только уверенные (≥60%% или ≤40%%):",
+            "▫️ Исход — <b>%.1f%%</b> (%d из %d)"
+            % (confident["rate"] * 100, confident["hits"], confident["n"]),
+        ]
+    lines += [
+        "",
+        "Показываем обе цифры: и общую, и уверенную.",
+        "Бот: @footballizator_bot",
+        "",
+        "<i>18+. Вероятности, не гарантии.</i>",
+    ]
+    return "\n".join(lines)
+
+
 async def publish_next(bot: object, pool: asyncpg.Pool, channel_id: str) -> bool:
     """Опубликовать следующий пост очереди. True — что-то ушло в канал."""
     row = await db.next_post(pool)

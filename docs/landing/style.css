@@ -1,0 +1,56 @@
+:root {
+  --bg: #0f172a;
+  --card: #16213a;
+  --text: #e6edf7;
+  --muted: #9aa8c0;
+  --green: #10b981;
+  --amber: #f59e0b;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+a { color: var(--green); text-decoration: none; }
+.nav {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 24px; border-bottom: 1px solid #1f2c47;
+  position: sticky; top: 0; background: rgba(15,23,42,.92); backdrop-filter: blur(6px);
+}
+.brand { font-weight: 700; color: var(--text); }
+.nav nav { display: flex; gap: 18px; align-items: center; }
+.nav .cta {
+  background: var(--green); color: #04231a; padding: 8px 14px;
+  border-radius: 8px; font-weight: 700;
+}
+main { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
+.hero { text-align: center; padding: 40px 0 24px; }
+.hero h1 { font-size: 40px; margin: 0 0 12px; line-height: 1.15; }
+.hero p { color: var(--muted); font-size: 18px; max-width: 680px; margin: 0 auto 24px; }
+.button {
+  display: inline-block; background: var(--green); color: #04231a;
+  padding: 14px 26px; border-radius: 10px; font-weight: 700; font-size: 18px;
+}
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.card { background: var(--card); border: 1px solid #22304e; border-radius: 12px; padding: 20px; }
+.card h3 { margin-top: 0; }
+.price { font-size: 32px; font-weight: 700; color: var(--amber); }
+.price small { font-size: 14px; color: var(--muted); font-weight: 400; }
+h2 { margin-top: 48px; }
+table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #22304e; }
+th { color: var(--muted); font-weight: 600; }
+.big { font-size: 28px; font-weight: 700; color: var(--green); }
+.muted { color: var(--muted); font-size: 14px; }
+pre {
+  background: #0b1225; border: 1px solid #22304e; border-radius: 10px;
+  padding: 16px; overflow-x: auto; font-size: 14px; white-space: pre-wrap;
+}
+footer { border-top: 1px solid #1f2c47; padding: 24px; text-align: center; color: var(--muted); font-size: 14px; }
+.legal h1 { font-size: 32px; }
+.legal h2 { font-size: 20px; margin-top: 32px; }
+.legal ul { padding-left: 20px; }
+.table-row { border-bottom: 1px solid #22304e; padding: 6px 0; }

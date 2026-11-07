@@ -20,7 +20,7 @@ from football_analyzer.bot import handlers
 from football_analyzer.bot.access import AccessMiddleware
 from football_analyzer.config import get_settings
 from football_analyzer.scheduler.delivery import deliver_due
-from football_analyzer.scheduler.publisher import publish_next
+from football_analyzer.scheduler.publisher import accuracy_post, publish_next
 from football_analyzer.storage import db
 
 log = logging.getLogger(__name__)
@@ -91,10 +91,49 @@ async def main() -> None:
                 log.info("прогнозов отправлено: %d", report.sent)
             if report.failed:
                 log.warning("не отправлено: %d", report.failed)
+            # Алерт админу: молчаливый сбой рассылки — худший вид сбоя.
+            if report.failed > 0:
+                for admin_id in settings.admin_ids:
+                    try:
+                        await bot.send_message(
+                            admin_id,
+                            "WARN сбой рассылки: не отправлено %d из %d"
+                            % (report.failed, report.due),
+                        )
+                    except Exception:  # noqa: BLE001
+                        continue
         except Exception as exc:  # noqa: BLE001
             log.error("рассылка не удалась: %s", exc)
+            for admin_id in settings.admin_ids:
+                try:
+                    await bot.send_message(admin_id, "Рассылка упала: %s" % exc)
+                except Exception:  # noqa: BLE001
+                    continue
 
     scheduler.add_job(send_due_forecasts, "interval", minutes=10, id="deliver")
+
+    async def publish_accuracy() -> None:
+        """Раз в неделю — пост с публичной точностью в канал."""
+        if pool is None or not settings.channel_id:
+            return
+        try:
+            from football_analyzer.cli import _accuracy
+
+            report = await _accuracy(settings.require_database_url(), 30)
+            await bot.send_message(settings.channel_id, accuracy_post(report))
+            log.info("опубликован пост точности")
+        except Exception as exc:  # noqa: BLE001
+            log.error("пост точности не удался: %s", exc)
+
+    scheduler.add_job(
+        publish_accuracy,
+        "cron",
+        day_of_week="mon",
+        hour=9,
+        minute=0,
+        timezone="Europe/Moscow",
+        id="accuracy_weekly",
+    )
 
     async def publish_to_channel() -> None:
         """Пост в канал: 10:00 и 18:00 МСК."""
@@ -104,6 +143,11 @@ async def main() -> None:
             await publish_next(bot, pool, settings.channel_id)
         except Exception as exc:  # noqa: BLE001
             log.error("публикация в канал не удалась: %s", exc)
+            for admin_id in settings.admin_ids:
+                try:
+                    await bot.send_message(admin_id, "Пост в канал не ушёл: %s" % exc)
+                except Exception:  # noqa: BLE001
+                    continue
 
     scheduler.add_job(
         publish_to_channel,

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Football Analyzer — вероятности футбольных матчей, которые можно проверить</title>
+<meta name="description" content="Математический анализ футбола: вероятности голов, углов и карточек за 5 часов до матча. Публичная статистика попаданий. 18+.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="nav">
+  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <nav>
+    <a href="#prices">Тарифы</a>
+    <a href="#accuracy">Точность</a>
+    <a href="#documents">Документы</a>
+    <a class="cta" href="https://t.me/footballizator_bot">Открыть бота</a>
+  </nav>
+</header>
+
+<main>
+  <section class="hero">
+    <h1>Вероятности, которые можно проверить</h1>
+    <p>
+      Математический анализ футбольных матчей: тоталы, исходы, вероятный счёт,
+      голы команд, углы и карточки — в процентах. За 5 часов до начала матча.
+      Не «каппер» и не ставки: расчёт по 3 сезонам истории.
+    </p>
+    <a class="button" href="https://t.me/footballizator_bot">Попробовать 3 дня бесплатно</a>
+    <p class="muted">20 соревнований · 20 000+ матчей в модели · 18+</p>
+  </section>
+
+  <h2>Как это работает</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>1. Сила команд</h3>
+      <p>Атака и защита считаются относительно среднего по лиге. Старые матчи весят меньше — модель не живёт прошлым сезоном.</p>
+    </div>
+    <div class="card">
+      <h3>2. Распределение счёта</h3>
+      <p>Пуассон с поправкой Диксона–Коулза: из него получаются тотал, исход, точный счёт и индивидуальные тоталы.</p>
+    </div>
+    <div class="card">
+      <h3>3. Доставка</h3>
+      <p>Бот сам находит матч в расписании и присылает раскладку за 5 часов. Ничего не нужно искать вручную.</p>
+    </div>
+  </div>
+
+  <h2>Пример прогноза</h2>
+  <pre>⚽ Crystal Palace — Liverpool
+🏆 АПЛ (Англия)
+🕐 08.11, 17:00 МСК
+
+🎯 Исход: П1 43% · Х 28% · П2 29%
+🥅 Тотал: ТБ 1,5 — 72% · ТБ 2,5 — 46% · ТБ 3,5 — 24%
+🔮 Счёт: 1:1 13% · 1:0 11% · 2:1 9%
+
+Полная раскладка — углы, карточки, голы команд — в боте.</pre>
+
+  <h2 id="prices">Тарифы</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>7 дней</h3>
+      <p class="price">149 ₽ <small>· 21 ₽/день</small></p>
+      <p class="muted">Попробовать без долгих обязательств.</p>
+    </div>
+    <div class="card">
+      <h3>30 дней</h3>
+      <p class="price">499 ₽ <small>· 17 ₽/день</small></p>
+      <p class="muted">Основной тариф: месяц всех прогнозов.</p>
+    </div>
+    <div class="card">
+      <h3>90 дней</h3>
+      <p class="price">1199 ₽ <small>· 13 ₽/день</small></p>
+      <p class="muted">Самый выгодный в пересчёте на день.</p>
+    </div>
+  </div>
+  <p class="muted">
+    Первые 3 дня бесплатно. Автопродления нет: срок закончился — деньги не списываются.
+    Оплата — ЮKassa (карты РФ, СБП).
+  </p>
+
+  <h2 id="accuracy">Публичная точность</h2>
+  <p class="muted">
+    Считается на матчах, которых модель не видела при обучении: обучение до начала окна,
+    проверка внутри окна. Показываем и общую цифру, и только уверенные прогнозы —
+    без отбора «красивых» случаев.
+  </p>
+  <table id="accuracy-table">
+    <thead><tr><th>Рынок</th><th>Матчей</th><th>Попало</th><th>Доля</th></tr></thead>
+    <tbody><tr><td colspan="4">Загрузка…</td></tr></tbody>
+  </table>
+  <p class="muted" id="accuracy-window"></p>
+
+  <h2 id="documents">Документы</h2>
+  <ul>
+    <li><a href="offer.html">Публичная оферта</a></li>
+    <li><a href="terms.html">Пользовательское соглашение</a></li>
+    <li><a href="privacy.html">Политика обработки персональных данных</a></li>
+  </ul>
+
+  <h2>Частые вопросы</h2>
+  <div class="card">
+    <h3>Это прогнозы для ставок?</h3>
+    <p>Нет. Сервис не принимает ставки, не является букмекером и не даёт советов по ставкам. Это вероятности на основе истории матчей; решения вы принимаете сами.</p>
+  </div>
+  <div class="card">
+    <h3>Гарантируете выигрыш?</h3>
+    <p>Нет. 70% — это не «всегда». Любой исход возможен, и это нормальная математика.</p>
+  </div>
+  <div class="card">
+    <h3>Можно без Telegram?</h3>
+    <p>Пока нет. Бот работает только в Telegram.</p>
+  </div>
+</main>
+
+<footer>
+  <p>18+. Материалы — аналитика и вероятности, а не призыв к ставкам.</p>
+  <p>Самозанятый Хидиров Темур Орифжонович · ИНН 021904477296 · khidrov@yandex.ru</p>
+</footer>
+
+<script>
+fetch('accuracy.json').then(r => r.json()).then(data => {
+  const tbody = document.querySelector('#accuracy-table tbody');
+  const rows = Object.entries(data.markets || {});
+  if (!rows.length) { return; }
+  tbody.innerHTML = rows.map(([name, v]) =>
+    `<tr><td>${name}</td><td>${v.n}</td><td>${v.hits}</td><td>${(v.rate * 100).toFixed(1)}%</td></tr>`
+  ).join('');
+  const confident = data.confident && data.confident['исход'];
+  if (confident) {
+    tbody.insertAdjacentHTML('beforeend',
+      `<tr><td><strong>исход (уверенные)</strong></td><td>${confident.n}</td><td>${confident.hits}</td><td><strong>${(confident.rate * 100).toFixed(1)}%</strong></td></tr>`);
+  }
+  document.querySelector('#accuracy-window').textContent =
+    `Окно: ${data.window_days} дней. Обновлено: ${new Date(data.generated_at).toLocaleString('ru-RU')}.`;
+}).catch(() => {});
+</script>
+</body>
+</html>
