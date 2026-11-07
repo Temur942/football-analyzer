@@ -20,6 +20,7 @@ from datetime import UTC, datetime
 
 import aiohttp
 
+from football_analyzer.analysis.bridge import build_cross_model
 from football_analyzer.analysis.forecast import build_forecast, render_text
 from football_analyzer.analysis.ratings import MatchRow, fit_rates
 from football_analyzer.analysis.service import fit_all_models
@@ -667,6 +668,116 @@ def cmd_deliver(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _backtest_cups(dsn: str, before: datetime, min_train: int) -> list[dict]:
+    """Проверить углы и ЖК на еврокубках: калибровка важнее средней точности.
+
+    Считаем Brier — насколько вероятности совпали с фактом (0 = идеально,
+    0.25 = «всегда 50%»). Сравниваем с базовой моделью без сшивки лиг.
+    """
+    pool = await db.connect(dsn)
+    rows: list[dict] = []
+    try:
+        await db.apply_schema(pool)
+        competitions = await db.competition_ids(pool)
+        league_ids = [c for c in competitions if not c.startswith(CUP_PREFIXES)]
+        cup_ids = [c for c in competitions if c.startswith(CUP_PREFIXES)]
+
+        league_matches = {
+            cid: [to_match_row(r) for r in await db.finished_matches(pool, cid)]
+            for cid in league_ids
+        }
+        cups = [to_match_row(r) for cid in cup_ids for r in await db.finished_matches(pool, cid)]
+        await pool.close()
+
+        train = [m for m in cups if m.kickoff_utc < before]
+        test = [m for m in cups if m.kickoff_utc >= before]
+        if len(train) < min_train or len(test) < 20:
+            return rows
+
+        model = build_cross_model(league_matches, train, now=before)
+
+        lines = {
+            "углы 8,5": ("corners", 8.5),
+            "углы 9,5": ("corners", 9.5),
+            "ЖК 3,5": ("yellow", 3.5),
+            "ЖК 4,5": ("yellow", 4.5),
+        }
+        stats: dict[str, dict[str, float]] = {
+            name: {"pred": 0.0, "actual": 0.0, "n": 0} for name in lines
+        }
+        for match in test:
+            forecast = build_forecast(
+                model,  # type: ignore[arg-type]
+                competition_id="ucl",
+                home_team=match.home_team,
+                away_team=match.away_team,
+                kickoff_utc=match.kickoff_utc,
+            )
+            corners_total = (match.home_corners or 0) + (match.away_corners or 0)
+            yellow_total = (match.home_yellow or 0) + (match.away_yellow or 0)
+            for name, (market, line) in lines.items():
+                source = (
+                    corners_total
+                    if market == "corners" and match.home_corners is not None
+                    else yellow_total
+                    if market == "yellow" and match.home_yellow is not None
+                    else None
+                )
+                if source is None:
+                    continue
+                probability = (
+                    forecast.corners[line] if market == "corners" else forecast.yellow[line]
+                )
+                outcome = 1.0 if source > line else 0.0
+                bucket = stats[name]
+                bucket["pred"] += (probability - outcome) ** 2
+                bucket["actual"] += (0.5 - outcome) ** 2  # база: «всегда 50%»
+                bucket["n"] += 1
+
+        for name, bucket in stats.items():
+            if bucket["n"] == 0:
+                continue
+            rows.append(
+                {
+                    "market": name,
+                    "matches": int(bucket["n"]),
+                    "brier": bucket["pred"] / bucket["n"],
+                    "baseline": bucket["actual"] / bucket["n"],
+                }
+            )
+    finally:
+        pass
+    return rows
+
+
+def cmd_backtest_cups(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        before = datetime.fromisoformat(args.before).replace(tzinfo=UTC)
+    except ValueError:
+        print("ОШИБКА: --before в формате YYYY-MM-DD", file=sys.stderr)
+        return EXIT_PROBLEM
+    try:
+        rows = asyncio.run(_backtest_cups(settings.require_database_url(), before, args.min_train))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+
+    print("=" * 84)
+    print("  БЭКТЕСТ УГЛОВ И ЖК В ЕВРОКУБКАХ (обучение до %s)" % args.before)
+    print("=" * 84)
+    print("  %-12s %8s %10s %12s %10s" % ("рынок", "матчей", "Brier", "база 50%", "лучше?"))
+    for row in rows:
+        better = "да" if row["brier"] < row["baseline"] else "нет"
+        print(
+            "  %-12s %8d %10.4f %12.4f %10s"
+            % (row["market"], row["matches"], row["brier"], row["baseline"], better)
+        )
+    print("=" * 84)
+    print("  Brier: меньше — лучше. 0.25 = «всегда 50%».")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -745,6 +856,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="реально отправлять (по умолчанию пробный прогон)",
     )
     p_deliver.set_defaults(func=cmd_deliver)
+
+    p_cups = sub.add_parser("backtest-cups", help="бэктест углов и ЖК в еврокубках")
+    p_cups.add_argument("--before", required=True, help="дата отсечки YYYY-MM-DD")
+    p_cups.add_argument("--min-train", type=int, default=300)
+    p_cups.set_defaults(func=cmd_backtest_cups)
 
     return parser
 
