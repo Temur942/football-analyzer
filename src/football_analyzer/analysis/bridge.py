@@ -41,10 +41,12 @@ class CrossRates:
     mu_away: float = 1.1
     rho: float = -0.05
     half_share: float = 0.45
-    league_corners_home: dict[str, float] = field(default_factory=dict)
-    league_corners_away: dict[str, float] = field(default_factory=dict)
-    league_yellow_home: dict[str, float] = field(default_factory=dict)
-    league_yellow_away: dict[str, float] = field(default_factory=dict)
+    # Средние по самим еврокубкам: в плей-офф игра грубее и углов больше,
+    # чем в домашних чемпионатах, поэтому брать лиговые средние нельзя.
+    cup_corners_home: float = 5.0
+    cup_corners_away: float = 4.6
+    cup_yellow_home: float = 2.2
+    cup_yellow_away: float = 2.4
 
     def _league(self, team: str) -> str | None:
         return self.team_league.get(team)
@@ -79,15 +81,10 @@ class CrossRates:
         )
         return max(lam_home, 0.05), max(lam_away, 0.05)
 
-    def _league_base(self, table: dict[str, float], team: str, fallback: float) -> float:
-        league = self._league(team)
-        return table.get(league, fallback) if league else fallback
-
     def corners_lambda(self, home_team: str, away_team: str) -> tuple[float, float]:
-        # Углы — свойство игры команды; межлиговую силу к ним не применяем
-        # (проверять отдельно), но средние берём по своей лиге.
-        base_home = self._league_base(self.league_corners_home, home_team, 5.0)
-        base_away = self._league_base(self.league_corners_away, away_team, 4.5)
+        # Средние — по кубкам, а не по домашним лигам: в плей-офф углов больше.
+        base_home = self.cup_corners_home
+        base_away = self.cup_corners_away
         lam_home = (
             base_home
             * self._team_rate(home_team, "attack_corners")
@@ -101,8 +98,9 @@ class CrossRates:
         return max(lam_home, 0.2), max(lam_away, 0.2)
 
     def yellow_lambda(self, home_team: str, away_team: str) -> tuple[float, float]:
-        base_home = self._league_base(self.league_yellow_home, home_team, 2.0)
-        base_away = self._league_base(self.league_yellow_away, away_team, 2.2)
+        # Средние — по кубкам: карточек в еврокубках больше, чем в лиге.
+        base_home = self.cup_yellow_home
+        base_away = self.cup_yellow_away
         lam_home = (
             base_home
             * self._team_rate(home_team, "attack_yellow")
@@ -224,6 +222,59 @@ def fit_league_strength(
     return {league: math.exp(value) for league, value in zip(leagues, values, strict=True)}
 
 
+def _calibrate_cup_bases(model: CrossRates, cross_matches: list[MatchRow]) -> None:
+    """Подобрать средние по кубкам так, чтобы прогноз совпал с фактом.
+
+    Считаем среднее по завершённым еврокубковым матчам и сверяем с тем, что
+    даёт модель (средние × сила команд). Множитель применяем к среднему —
+    он линейный, одного прохода достаточно.
+    """
+
+    def tune(
+        rows: list[tuple[MatchRow, int, int]],
+        attr_home: str,
+        attr_away: str,
+        base_home: float,
+        base_away: float,
+    ) -> tuple[float, float]:
+        if not rows:
+            return base_home, base_away
+        pred_home = 0.0
+        pred_away = 0.0
+        for match, _home_value, _away_value in rows:
+            attack_home = model._team_rate(match.home_team, attr_home)
+            defence_away = model._team_rate(match.away_team, attr_away)
+            attack_away = model._team_rate(match.away_team, attr_home)
+            defence_home = model._team_rate(match.home_team, attr_away)
+            pred_home += base_home * attack_home * defence_away
+            pred_away += base_away * attack_away * defence_home
+        actual_home = sum(value for _, value, _ in rows) / len(rows)
+        actual_away = sum(value for _, _, value in rows) / len(rows)
+        factor = 1.0
+        if pred_home > 0 and pred_away > 0:
+            factor = (
+                (actual_home / (pred_home / len(rows))) + (actual_away / (pred_away / len(rows)))
+            ) / 2
+        return base_home * factor, base_away * factor
+
+    corners = [
+        (match, match.home_corners, match.away_corners)
+        for match in cross_matches
+        if match.home_corners is not None and match.away_corners is not None
+    ]
+    model.cup_corners_home, model.cup_corners_away = tune(
+        corners, "attack_corners", "defence_corners", model.cup_corners_home, model.cup_corners_away
+    )
+    cards = [
+        (match, match.home_yellow, match.away_yellow)
+        for match in cross_matches
+        if match.home_yellow is not None and match.away_yellow is not None
+    ]
+    model.cup_yellow_home, model.cup_yellow_away = tune(
+        cards, "attack_yellow", "defence_yellow", model.cup_yellow_home, model.cup_yellow_away
+    )
+
+
 def build_cross_model(
     league_matches: dict[str, list[MatchRow]],
     cross_matches: list[MatchRow],
@@ -257,15 +308,13 @@ def build_cross_model(
         ),
         mu_home=max(mu_home, 0.05),
         mu_away=max(mu_away, 0.05),
-        league_corners_home={cid: rates.league_home_corners for cid, rates in league_rates.items()},
-        league_corners_away={cid: rates.league_away_corners for cid, rates in league_rates.items()},
-        league_yellow_home={cid: rates.league_home_yellow for cid, rates in league_rates.items()},
-        league_yellow_away={cid: rates.league_away_yellow for cid, rates in league_rates.items()},
     )
     if league_rates:
         first = next(iter(league_rates.values()))
         model.rho = first.rho
         model.half_share = first.half_share
+
+    _calibrate_cup_bases(model, cross_matches)
 
     if model.strength:
         ordered = sorted(model.strength.items(), key=lambda item: item[1], reverse=True)
