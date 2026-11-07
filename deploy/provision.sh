@@ -27,10 +27,14 @@ case "$APP_ENV_NAME" in
   stage)
     APP_DIR=/var/www/football-analyzer-stage
     DB_NAME=football
+    DB_USER=football
     ;;
   prod)
     APP_DIR=/var/www/football-analyzer-prod
     DB_NAME=football_prod
+    # Отдельная роль: иначе развёртывание прода меняет пароль роли стейджа
+    # и ломает доступ к уже работающей базе (проверено на живом сервере).
+    DB_USER=football_prod
     ;;
   *)
     echo "ОШИБКА: окружение должно быть stage или prod" >&2
@@ -42,7 +46,6 @@ APP_USER=football
 REPO=https://github.com/Temur942/football-analyzer.git
 CONF_DIR=/etc/football-analyzer
 ENV_FILE="$CONF_DIR/$APP_ENV_NAME.env"
-DB_USER=football
 
 log() { printf '\n=== %s ===\n' "$*"; }
 
