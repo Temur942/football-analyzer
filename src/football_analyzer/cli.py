@@ -1130,6 +1130,51 @@ def cmd_accuracy(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _health(dsn: str) -> dict[str, object]:
+    pool = await db.connect(dsn)
+    try:
+        await db.apply_schema(pool)
+        summary = await db.ops_summary(pool)
+        beat_age = await db.heartbeat_age(pool)
+    finally:
+        await pool.close()
+    summary["heartbeat_age"] = beat_age
+    return summary
+
+
+def cmd_health(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        summary = asyncio.run(_health(settings.require_database_url()))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+
+    raw_age = summary.get("heartbeat_age")
+    age = float(raw_age) if isinstance(raw_age, (int, float)) else None
+    age_text = "нет" if age is None else "%.0f сек назад" % age
+    problems = []
+    if age is None or age > 1800:
+        problems.append("бот не подаёт признаков жизни")
+    if summary.get("pending_posts") == 0:
+        problems.append("очередь постов пуста")
+
+    print("=" * 64)
+    print("  ЗДОРОВЬЕ СЕРВИСА")
+    print("=" * 64)
+    print("  Пульс бота:            %s" % age_text)
+    print("  Последняя отправка:    %s" % summary.get("last_delivery"))
+    print("  Матчей в окне 5 ч:     %s" % summary.get("due"))
+    print("  Постов в очереди:      %s" % summary.get("pending_posts"))
+    print("  Активных подписок:     %s" % summary.get("active"))
+    print("=" * 64)
+    if problems:
+        print("  ВНИМАНИЕ: " + "; ".join(problems))
+        return EXIT_PROBLEM
+    print("  Всё в порядке.")
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -1240,6 +1285,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_acc.add_argument("--days", type=int, default=30)
     p_acc.add_argument("--json", default="docs/landing/accuracy.json")
     p_acc.set_defaults(func=cmd_accuracy)
+
+    p_health = sub.add_parser("health", help="проверить пульс, отправки и очередь")
+    p_health.set_defaults(func=cmd_health)
 
     return parser
 

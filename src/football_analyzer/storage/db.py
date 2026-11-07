@@ -797,3 +797,63 @@ async def start_trial(pool: asyncpg.Pool, chat_id: int, days: int = 3) -> dateti
             timedelta(days=days),
         )
     return result["paid_until"]
+
+
+async def beat(pool: asyncpg.Pool, name: str = "scheduler") -> None:
+    """Отметка «бот жив»."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO heartbeat (name, updated_at) VALUES ($1, now())
+            ON CONFLICT (name) DO UPDATE SET updated_at = now()
+            """,
+            name,
+        )
+
+
+async def heartbeat_age(pool: asyncpg.Pool, name: str = "scheduler") -> float | None:
+    """Сколько секунд назад был пульс. None — пульса не было ни разу."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT extract(epoch FROM (now() - updated_at)) AS age FROM heartbeat WHERE name = $1",
+            name,
+        )
+    return float(row["age"]) if row else None
+
+
+async def expiring_subscriptions(pool: asyncpg.Pool, hours: int = 24) -> list[int]:
+    """Кому напомнить о продлении: подписка кончается в ближайшие N часов."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT s.chat_id
+              FROM subscribers s
+             WHERE s.paid_until BETWEEN now() AND now() + make_interval(hours => $1)
+               AND NOT EXISTS (
+                     SELECT 1 FROM events e
+                      WHERE e.chat_id = s.chat_id
+                        AND e.name = 'renewal_reminder'
+                        AND e.created_at > now() - interval '7 days'
+                   )
+            """,
+            hours,
+        )
+    return [int(row["chat_id"]) for row in rows]
+
+
+async def ops_summary(pool: asyncpg.Pool) -> dict[str, object]:
+    """Сводка для проверки здоровья: пульс, последняя отправка, данные."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT
+              (SELECT extract(epoch FROM (now() - updated_at)) FROM heartbeat
+                WHERE name = 'scheduler') AS heartbeat_age,
+              (SELECT max(created_at) FROM deliveries) AS last_delivery,
+              (SELECT count(*) FROM matches
+                WHERE kickoff_utc BETWEEN now() AND now() + interval '5 hours') AS due,
+              (SELECT count(*) FROM channel_posts WHERE published_at IS NULL) AS pending_posts,
+              (SELECT count(*) FROM subscribers WHERE paid_until > now()) AS active
+            """
+        )
+    return {key: row[key] for key in row.keys()}

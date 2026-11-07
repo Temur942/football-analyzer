@@ -145,6 +145,68 @@ async def main() -> None:
 
     scheduler.add_job(send_due_forecasts, "interval", minutes=10, id="deliver")
 
+    async def heartbeat_tick() -> None:
+        if pool is None:
+            return
+        try:
+            await db.beat(pool)
+        except Exception as exc:  # noqa: BLE001
+            log.error("не удалось записать пульс: %s", exc)
+
+    scheduler.add_job(heartbeat_tick, "interval", minutes=10, id="heartbeat")
+
+    async def watch_health() -> None:
+        """Если пульса нет 30 минут — сообщить админу. Тишина не должна быть нормой."""
+        if pool is None or not settings.admin_ids:
+            return
+        try:
+            age = await db.heartbeat_age(pool)
+        except Exception as exc:  # noqa: BLE001
+            log.error("проверка пульса не удалась: %s", exc)
+            return
+        if age is None:
+            return
+        if age > 1800:
+            for admin_id in settings.admin_ids:
+                try:
+                    await bot.send_message(
+                        admin_id,
+                        "ALERT бот не подаёт признаков жизни: пульс %.0f минут назад." % (age / 60),
+                    )
+                except Exception:  # noqa: BLE001
+                    continue
+
+    scheduler.add_job(watch_health, "interval", minutes=30, id="watch_health")
+
+    async def remind_expiring() -> None:
+        """Напомнить о продлении за сутки до окончания подписки."""
+        if pool is None:
+            return
+        try:
+            chat_ids = await db.expiring_subscriptions(pool, 24)
+        except Exception as exc:  # noqa: BLE001
+            log.error("не удалось получить истекающие подписки: %s", exc)
+            return
+        for chat_id in chat_ids:
+            try:
+                await bot.send_message(
+                    chat_id,
+                    "Подписка заканчивается в ближайшие сутки. "
+                    "Продлить: /tariffs. Автопродления нет — деньги сами не спишутся.",
+                )
+                await db.log_event(pool, chat_id, "renewal_reminder")
+            except Exception:  # noqa: BLE001
+                continue
+
+    scheduler.add_job(
+        remind_expiring,
+        "cron",
+        hour=12,
+        minute=0,
+        timezone="Europe/Moscow",
+        id="renewal_reminder",
+    )
+
     async def publish_accuracy() -> None:
         """Раз в неделю — пост с публичной точностью в канал."""
         if pool is None or not settings.channel_id:
