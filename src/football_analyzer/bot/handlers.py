@@ -201,6 +201,43 @@ def doc_nav() -> InlineKeyboardMarkup:
     return builder.as_markup()
 
 
+@router.message(Command("stats"))
+async def handle_stats(
+    message: Message,
+    pool: asyncpg.Pool | None = None,
+    is_admin: bool = False,
+) -> None:
+    """Сводка для администратора. Остальным — отказ, без подробностей."""
+    if not is_admin:
+        await message.answer("Команда доступна только администратору.")
+        return
+    if pool is None:
+        await message.answer("База недоступна, сводку не собрать.")
+        return
+
+    summary = await db.admin_summary(pool)
+    users = await db.recent_subscribers(pool, 5)
+
+    lines = [
+        "📊 <b>Сводка</b>",
+        "",
+        "👤 Пользователей: <b>%d</b> (с согласием: %d)" % (summary["users"], summary["consented"]),
+        "⭐ Активных подписок: <b>%d</b>" % summary["active_subs"],
+        "",
+        "⚽ Матчей в базе: <b>%d</b>, впереди: %d" % (summary["matches"], summary["upcoming"]),
+        "🔮 Прогнозов: <b>%d</b>" % summary["predictions"],
+        "📨 Отправок: %d (пробных %d, ошибок %d)"
+        % (summary["sent"], summary["dry_run"], summary["failed"]),
+    ]
+    if users:
+        lines += ["", "👥 <b>Последние пользователи</b>"]
+        for row in users:
+            paid = row["paid_until"].strftime("%d.%m.%Y") if row["paid_until"] else "нет"
+            name = ("@" + row["username"]) if row["username"] else str(row["chat_id"])
+            lines.append("▫️ %s — подписка до %s" % (name, paid))
+    await message.answer("\n".join(lines))
+
+
 @router.callback_query(F.data == "my_subscription")
 async def handle_my_subscription(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
     """Статус подписки: до какого числа действует или что её нет."""

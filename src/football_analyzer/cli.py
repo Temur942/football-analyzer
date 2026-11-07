@@ -778,6 +778,70 @@ def cmd_backtest_cups(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _selftest_delivery(dsn: str, lead_hours: int) -> dict[str, int]:
+    """Проверить, что два одновременных прохода рассылки не дают дублей.
+
+    Идемпотентность — единственная защита от «прогноз пришёл дважды» после
+    перезапуска. Проверяем не рассуждением, а двумя параллельными проходами.
+    """
+    pool = await db.connect(dsn)
+    try:
+        await db.apply_schema(pool)
+        before = await db.delivery_stats(pool)
+        first, second = await asyncio.gather(
+            deliver_due(pool, lead_hours=lead_hours, dry_run=True, recipients=[0]),
+            deliver_due(pool, lead_hours=lead_hours, dry_run=True, recipients=[0]),
+        )
+        after = await db.delivery_stats(pool)
+        async with pool.acquire() as conn:
+            duplicates = await conn.fetchval(
+                """
+                SELECT count(*) FROM (
+                    SELECT match_id, chat_id FROM deliveries
+                     GROUP BY 1, 2 HAVING count(*) > 1
+                ) AS dupes
+                """
+            )
+    finally:
+        await pool.close()
+    return {
+        "first_written": first.dry_run,
+        "second_written": second.dry_run,
+        "first_skipped": first.skipped,
+        "second_skipped": second.skipped,
+        "before": before["dry_run"] + before["sent"],
+        "after": after["dry_run"] + after["sent"],
+        "duplicates": int(duplicates or 0),
+        "due": first.due,
+    }
+
+
+def cmd_selftest_delivery(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        result = asyncio.run(_selftest_delivery(settings.require_database_url(), args.lead_hours))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+
+    print("=" * 70)
+    print("  СТРЕСС-ТЕСТ РАССЫЛКИ: два прохода одновременно")
+    print("=" * 70)
+    print("  Матчей в окне:                 %d" % result["due"])
+    print("  Записал первый проход:         %d" % result["first_written"])
+    print("  Записал второй проход:         %d" % result["second_written"])
+    print("  Пропущено первым (уже было):   %d" % result["first_skipped"])
+    print("  Пропущено вторым:              %d" % result["second_skipped"])
+    print("  Записей было / стало:          %d / %d" % (result["before"], result["after"]))
+    print("  Дубликатов (матч+чат):         %d" % result["duplicates"])
+    print("=" * 70)
+    if result["duplicates"] == 0:
+        print("  ИТОГ: дублей нет — защита работает.")
+        return EXIT_OK
+    print("  ИТОГ: ОБНАРУЖЕНЫ ДУБЛИ — рассылку включать нельзя.")
+    return EXIT_PROBLEM
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -861,6 +925,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_cups.add_argument("--before", required=True, help="дата отсечки YYYY-MM-DD")
     p_cups.add_argument("--min-train", type=int, default=300)
     p_cups.set_defaults(func=cmd_backtest_cups)
+
+    p_selftest = sub.add_parser(
+        "selftest-delivery", help="проверить, что два прохода рассылки не дают дублей"
+    )
+    p_selftest.add_argument("--lead-hours", type=int, default=72)
+    p_selftest.set_defaults(func=cmd_selftest_delivery)
 
     return parser
 

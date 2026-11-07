@@ -594,3 +594,39 @@ async def subscription_until(pool: asyncpg.Pool, chat_id: int) -> datetime | Non
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT paid_until FROM subscribers WHERE chat_id = $1", chat_id)
     return row["paid_until"] if row else None
+
+
+async def admin_summary(pool: asyncpg.Pool) -> dict[str, int]:
+    """Сводка для админа: пользователи, подписки, матчи, отправки."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT
+              (SELECT count(*) FROM subscribers) AS users,
+              (SELECT count(*) FROM subscribers WHERE consent_at IS NOT NULL) AS consented,
+              (SELECT count(*) FROM subscribers
+                WHERE paid_until IS NOT NULL AND paid_until > now()) AS active_subs,
+              (SELECT count(*) FROM matches) AS matches,
+              (SELECT count(*) FROM matches
+                WHERE status = 'scheduled' AND kickoff_utc > now()) AS upcoming,
+              (SELECT count(*) FROM predictions) AS predictions,
+              (SELECT count(*) FROM deliveries WHERE status = 'sent') AS sent,
+              (SELECT count(*) FROM deliveries WHERE status = 'dry_run') AS dry_run,
+              (SELECT count(*) FROM deliveries WHERE status = 'failed') AS failed
+            """
+        )
+    return {key: int(row[key] or 0) for key in row.keys()}
+
+
+async def recent_subscribers(pool: asyncpg.Pool, limit: int = 10) -> list[asyncpg.Record]:
+    """Последние пользователи: кто, когда пришёл, до какого числа подписка."""
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            """
+            SELECT chat_id, username, consent_at, paid_until
+              FROM subscribers
+             ORDER BY COALESCE(consent_at, created_at) DESC
+             LIMIT $1
+            """,
+            limit,
+        )
