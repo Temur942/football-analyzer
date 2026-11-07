@@ -310,7 +310,7 @@ def _calibrate_cup_bases(
     cross_matches: list[MatchRow],
     *,
     now: datetime | None = None,
-    half_life_days: float = 180.0,
+    half_life_days: float = 90.0,
 ) -> None:
     """Подобрать средние по кубкам так, чтобы прогноз совпал с фактом.
 
