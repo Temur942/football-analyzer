@@ -12,7 +12,6 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from football_analyzer.analysis.poisson import (
-    nbinom_over,
     outcome_probs,
     poisson_over,
     score_matrix,
@@ -64,13 +63,6 @@ class Forecast:
     weather_note: str | None = None
 
 
-def _market_over(mean: float, line: float, dispersion: float | None) -> float:
-    """Вероятность «больше линии»: Пуассон или отрицательное биномиальное."""
-    if dispersion:
-        return nbinom_over(mean, line, dispersion)
-    return poisson_over(mean, line)
-
-
 def build_forecast(
     rates: Rates,
     *,
@@ -117,20 +109,10 @@ def build_forecast(
         home_goals={line: team_over(matrix, "home", line) for line in TEAM_LINES},
         away_goals={line: team_over(matrix, "away", line) for line in TEAM_LINES},
         corners={
-            line: _market_over(
-                lam_corner_home + lam_corner_away,
-                line,
-                getattr(rates, "corner_dispersion", None),
-            )
-            for line in CORNER_LINES
+            line: poisson_over(lam_corner_home + lam_corner_away, line) for line in CORNER_LINES
         },
         yellow={
-            line: _market_over(
-                lam_yellow_home + lam_yellow_away,
-                line,
-                getattr(rates, "yellow_dispersion", None),
-            )
-            for line in YELLOW_LINES
+            line: poisson_over(lam_yellow_home + lam_yellow_away, line) for line in YELLOW_LINES
         },
         scores=top_scores(matrix, 3),
         weather_note=weather_note,
