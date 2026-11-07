@@ -22,7 +22,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from football_analyzer.analysis.forecast import build_forecast, render_text
 from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models
 from football_analyzer.bot.access import BETA_TEXT, CONSENT_TEXT
-from football_analyzer.bot.docs import DOCUMENTS, send_document
+from football_analyzer.bot.docs import DOCUMENTS, delete_messages, send_document
 from football_analyzer.config import get_settings
 from football_analyzer.storage import db
 
@@ -188,23 +188,60 @@ async def handle_consent_no(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.callback_query(F.data == "docs_menu")
+# id сообщений с текстом документа: нужны, чтобы «Закрыть» убирал их из чата.
+_DOC_MESSAGES: dict[int, list[int]] = {}
+
+
+def doc_nav() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="⬅️ К документам", callback_data="docs_list")
+    builder.button(text="✖️ Закрыть", callback_data="docs_close")
+    builder.adjust(2)
+    return builder.as_markup()
+
+
+@router.callback_query(F.data.in_({"docs_menu", "docs_list"}))
 async def handle_docs_menu(callback: CallbackQuery) -> None:
-    if callback.message:
+    chat_id = callback.from_user.id
+    stale = _DOC_MESSAGES.pop(chat_id, [])
+    if stale:
+        await delete_messages(callback.bot, chat_id, stale)
+    if isinstance(callback.message, Message):
         await callback.message.answer(
             "📄 <b>Документы</b>\n\nВыберите, что открыть:", reply_markup=docs_menu()
         )
     await callback.answer()
 
 
+@router.callback_query(F.data == "docs_close")
+async def handle_docs_close(callback: CallbackQuery) -> None:
+    chat_id = callback.from_user.id
+    stale = _DOC_MESSAGES.pop(chat_id, [])
+    if stale:
+        await delete_messages(callback.bot, chat_id, stale)
+    if isinstance(callback.message, Message):
+        await callback.message.answer(start_text(), reply_markup=main_menu())
+    await callback.answer("Закрыто")
+
+
 @router.callback_query(F.data.startswith("doc_"))
 async def handle_document(callback: CallbackQuery) -> None:
     key = (callback.data or "").removeprefix("doc_")
-    if isinstance(callback.message, Message) and key in DOCUMENTS:
-        try:
-            await send_document(callback.message, key)
-        except FileNotFoundError:
-            await callback.message.answer("Документ временно недоступен.")
+    if not isinstance(callback.message, Message) or key not in DOCUMENTS:
+        await callback.answer()
+        return
+    chat_id = callback.from_user.id
+    stale = _DOC_MESSAGES.pop(chat_id, [])
+    if stale:
+        await delete_messages(callback.bot, chat_id, stale)
+    try:
+        ids = await send_document(callback.message, key)
+    except FileNotFoundError:
+        await callback.message.answer("Документ временно недоступен.")
+        await callback.answer()
+        return
+    _DOC_MESSAGES[chat_id] = ids
+    await callback.message.answer("Это весь документ. Что дальше?", reply_markup=doc_nav())
     await callback.answer()
 
 

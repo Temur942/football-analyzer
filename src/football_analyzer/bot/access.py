@@ -26,7 +26,15 @@ log = logging.getLogger(__name__)
 
 ALLOWED_COMMANDS = ("/start", "/help", "/myid", "/docs", "/start@", "/help@", "/myid@", "/docs@")
 # Эти кнопки нажимаются до согласия — иначе человек не сможет его дать.
-CONSENT_CALLBACKS = ("consent_yes", "consent_no", "doc_offer", "doc_terms", "doc_privacy")
+CONSENT_CALLBACKS = (
+    "consent_yes",
+    "consent_no",
+    "doc_offer",
+    "doc_terms",
+    "doc_privacy",
+    "docs_list",
+    "docs_close",
+)
 
 CONSENT_TEXT = (
     "👋 <b>Перед началом работы</b>\n\n"

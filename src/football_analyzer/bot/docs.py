@@ -76,8 +76,20 @@ def load_document(key: str) -> str:
     return _strip_markdown(path.read_text(encoding="utf-8"))
 
 
-async def send_document(message: Message, key: str) -> None:
-    """Отправить документ частями."""
+async def send_document(message: Message, key: str) -> list[int]:
+    """Отправить документ частями. Возвращает id сообщений — чтобы потом удалить."""
     text = load_document(key)
+    ids: list[int] = []
     for chunk in split_text(text):
-        await message.answer(chunk, parse_mode=None)
+        sent = await message.answer(chunk, parse_mode=None)
+        ids.append(sent.message_id)
+    return ids
+
+
+async def delete_messages(bot: object, chat_id: int, message_ids: list[int]) -> None:
+    """Удалить сообщения документа. Ошибки игнорируем: старое Telegram не отдаст."""
+    for message_id in message_ids:
+        try:
+            await bot.delete_message(chat_id, message_id)  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            continue

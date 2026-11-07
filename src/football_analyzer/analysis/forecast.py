@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from football_analyzer.analysis.poisson import (
     outcome_probs,
@@ -19,6 +20,8 @@ from football_analyzer.analysis.poisson import (
     total_over,
 )
 from football_analyzer.analysis.ratings import Rates
+
+MSK = ZoneInfo("Europe/Moscow")
 
 GOAL_LINES = (1.5, 2.5, 3.5)
 HALF_LINES = (0.5, 1.5)
@@ -120,35 +123,54 @@ def _line(value: float) -> str:
 
 
 def _lines(values: dict[float, float], prefix: str = "ТБ") -> str:
-    return " · ".join("%s %s — %s" % (prefix, _line(line), _pct(p)) for line, p in values.items())
+    return " · ".join(
+        "%s %s — <b>%s</b>" % (prefix, _line(line), _pct(p)) for line, p in values.items()
+    )
 
 
 def render_text(forecast: Forecast, competition_name: str | None = None) -> str:
-    """Текст прогноза для Telegram (HTML-разметка допустима)."""
-    title = forecast.home_team + " — " + forecast.away_team
-    header = title if not competition_name else "%s · %s" % (competition_name, title)
-    kickoff = forecast.kickoff_utc.strftime("%d.%m %H:%M UTC")
+    """Текст прогноза для Telegram.
 
-    scores = " → ".join(
-        "%d:%d (%s)" % (home, away, _pct(probability))
+    Время — московское: аудитория русскоязычная, UTC в сообщениях только путал.
+    """
+    title = forecast.home_team + " — " + forecast.away_team
+    kickoff = forecast.kickoff_utc.astimezone(MSK)
+
+    scores = " · ".join(
+        "<b>%d:%d</b> %s" % (home, away, _pct(probability))
         for home, away, probability in forecast.scores
     )
 
-    lines = [
-        "⚽ <b>%s</b>" % header,
-        kickoff,
+    blocks = [
+        "⚽ <b>%s</b>" % title,
+        "🏆 %s" % (competition_name or forecast.competition_id),
+        "🕐 %s МСК" % kickoff.strftime("%d.%m, %H:%M"),
         "",
-        "Тотал матча:      " + _lines(forecast.total),
-        "Тотал 1-го тайма: " + _lines(forecast.first_half),
-        "Исход:            П1 %s · Х %s · П2 %s"
-        % (_pct(forecast.p_home), _pct(forecast.p_draw), _pct(forecast.p_away)),
-        "Вероятные счета:  " + scores,
-        "Хозяева:          " + _lines(forecast.home_goals),
-        "Гости:            " + _lines(forecast.away_goals),
-        "Углы:             " + _lines(forecast.corners),
-        "ЖК:               " + _lines(forecast.yellow),
+        "🎯 <b>Исход</b>",
+        "▫️ Хозяева — <b>%s</b>" % _pct(forecast.p_home),
+        "▫️ Ничья — <b>%s</b>" % _pct(forecast.p_draw),
+        "▫️ Гости — <b>%s</b>" % _pct(forecast.p_away),
+        "",
+        "🥅 <b>Тотал матча</b>",
+        _lines(forecast.total),
+        "",
+        "⏱ <b>Тотал первого тайма</b>",
+        _lines(forecast.first_half),
+        "",
+        "🔮 <b>Вероятные счета</b>",
+        scores,
+        "",
+        "👥 <b>Голы команд</b>",
+        "▫️ Хозяева: " + _lines(forecast.home_goals),
+        "▫️ Гости: " + _lines(forecast.away_goals),
+        "",
+        "🚩 <b>Угловые</b>",
+        _lines(forecast.corners),
+        "",
+        "🟨 <b>Жёлтые карточки</b>",
+        _lines(forecast.yellow),
     ]
     if forecast.weather_note:
-        lines.append("")
-        lines.append("Погода: " + forecast.weather_note)
-    return "\n".join(lines)
+        blocks += ["", "🌦 <b>Погода:</b> " + forecast.weather_note]
+    blocks += ["", "<i>Вероятности, а не гарантии. 18+</i>"]
+    return "\n".join(blocks)
