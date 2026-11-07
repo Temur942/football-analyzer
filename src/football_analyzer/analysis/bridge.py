@@ -332,7 +332,9 @@ def build_cross_model(
         model.rho = first.rho
         model.half_share = first.half_share
 
-    _calibrate_cup_bases(model, cross_matches, now=now, half_life_days=half_life_days)
+    # У кубков свежесть важнее: состав лиг и темпы меняются быстрее,
+    # чем в домашнем чемпионате.
+    _calibrate_cup_bases(model, cross_matches, now=now, half_life_days=min(half_life_days, 90.0))
 
     if model.strength:
         ordered = sorted(model.strength.items(), key=lambda item: item[1], reverse=True)
