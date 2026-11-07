@@ -170,10 +170,15 @@ install -m 644 "$APP_DIR/deploy/football-analyzer-sync.service" \
   /etc/systemd/system/football-analyzer-sync.service
 install -m 644 "$APP_DIR/deploy/football-analyzer-sync.timer" \
   /etc/systemd/system/football-analyzer-sync.timer
+install -m 644 "$APP_DIR/deploy/football-analyzer-deliver.service" \
+  /etc/systemd/system/football-analyzer-deliver.service
+install -m 644 "$APP_DIR/deploy/football-analyzer-deliver.timer" \
+  /etc/systemd/system/football-analyzer-deliver.timer
 systemctl daemon-reload
 # Сбор расписания включаем сразу: он не требует токена.
 systemctl enable --now football-analyzer-sync.timer >/dev/null
-echo "таймер сбора расписания включён"
+systemctl enable --now football-analyzer-deliver.timer >/dev/null
+echo "таймеры сбора расписания и рассылки включены"
 echo "unit бота установлен (не включён: сначала нужен BOT_TOKEN)"
 
 # --------------------------------------------------------------------------- #

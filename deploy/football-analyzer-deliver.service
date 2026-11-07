@@ -1,0 +1,31 @@
+# =============================================================================
+# football-analyzer — рассылка прогнозов «за 5 часов до матча».
+#
+# ПОКА пробный прогон: Telegram с сервера недоступен (см. AGENTS.md §4),
+# поэтому прогнозы считаются и пишутся в журнал deliveries со статусом
+# dry_run, но не отправляются. Как только появится туннель — достаточно
+# заменить ExecStart на бота с APScheduler (или добавить --send).
+# =============================================================================
+
+[Unit]
+Description=football-analyzer: рассылка прогнозов (пробный прогон)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=football
+Group=football
+WorkingDirectory=/var/www/football-analyzer-stage
+EnvironmentFile=/etc/football-analyzer/stage.env
+Environment=APP_ENV=stage
+Environment=PYTHONUNBUFFERED=1
+Environment=SOCCERDATA_DIR=/var/www/football-analyzer-stage/var/soccerdata
+ExecStart=/var/www/football-analyzer-stage/.venv/bin/python -m football_analyzer.cli deliver --lead-hours 5
+TimeoutStartSec=600
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/www/football-analyzer-stage/var

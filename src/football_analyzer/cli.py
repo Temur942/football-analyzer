@@ -20,9 +20,9 @@ from datetime import UTC, datetime
 
 import aiohttp
 
-from football_analyzer.analysis.bridge import build_cross_model
 from football_analyzer.analysis.forecast import build_forecast, render_text
 from football_analyzer.analysis.ratings import MatchRow, fit_rates
+from football_analyzer.analysis.service import fit_all_models
 from football_analyzer.analysis.weather import forecast_at, geocode
 from football_analyzer.competitions import active_competitions
 from football_analyzer.config import Settings, get_settings
@@ -35,6 +35,7 @@ from football_analyzer.datasources.espn_stats import (
     parse_venue,
 )
 from football_analyzer.models import Competition
+from football_analyzer.scheduler.delivery import deliver_due
 from football_analyzer.storage import db
 
 log = logging.getLogger(__name__)
@@ -449,23 +450,7 @@ async def _predict(
         if not upcoming:
             return texts
 
-        all_competitions = await db.competition_ids(pool)
-        league_ids = [c for c in all_competitions if not c.startswith(CUP_PREFIXES)]
-        cup_ids = [c for c in all_competitions if c.startswith(CUP_PREFIXES)]
-
-        league_matches = {
-            competition_id: [
-                to_match_row(row) for row in await db.finished_matches(pool, competition_id)
-            ]
-            for competition_id in league_ids
-        }
-        cup_matches = [
-            to_match_row(row)
-            for competition_id in cup_ids
-            for row in await db.finished_matches(pool, competition_id)
-        ]
-
-        cross = build_cross_model(league_matches, cup_matches)
+        cross = await fit_all_models(pool)
 
         async with aiohttp.ClientSession() as session:
             per_competition: dict[str, int] = defaultdict(int)
@@ -641,6 +626,47 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _deliver(dsn: str, lead_hours: int, dry_run: bool) -> tuple[object, dict[str, int]]:
+    pool = await db.connect(dsn)
+    try:
+        await db.apply_schema(pool)
+        report = await deliver_due(pool, lead_hours=lead_hours, dry_run=dry_run)
+        stats = await db.delivery_stats(pool)
+    finally:
+        await pool.close()
+    return report, stats
+
+
+def cmd_deliver(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        report, stats = asyncio.run(
+            _deliver(settings.require_database_url(), args.lead_hours, not args.send)
+        )
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+
+    mode = "ПРОБНЫЙ ПРОГОН" if not args.send else "РЕАЛЬНАЯ ОТПРАВКА"
+    print("=" * 70)
+    print("  РАССЫЛКА ПРОГНОЗОВ (%s)" % mode)
+    print("=" * 70)
+    print("  Матчей в окне «за %d ч»: %d" % (args.lead_hours, report.due))  # type: ignore[attr-defined]
+    print("  Записано в журнал:       %d" % report.dry_run)  # type: ignore[attr-defined]
+    print("  Отправлено:              %d" % report.sent)  # type: ignore[attr-defined]
+    print("  Пропущено (уже было):    %d" % report.skipped)  # type: ignore[attr-defined]
+    print("  Ошибок:                  %d" % report.failed)  # type: ignore[attr-defined]
+    print(
+        "  Всего в журнале: отправлено %d, пробных %d, ошибок %d"
+        % (stats["sent"], stats["dry_run"], stats["failed"])
+    )
+    print("=" * 70)
+    for text in report.texts[:2]:  # type: ignore[attr-defined]
+        print(text)
+        print("-" * 70)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -710,6 +736,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_backtest.add_argument("--before", required=True, help="дата отсечки YYYY-MM-DD")
     p_backtest.add_argument("--min-train", type=int, default=300)
     p_backtest.set_defaults(func=cmd_backtest)
+
+    p_deliver = sub.add_parser("deliver", help="разослать прогнозы за N часов до матча")
+    p_deliver.add_argument("--lead-hours", type=int, default=5)
+    p_deliver.add_argument(
+        "--send",
+        action="store_true",
+        help="реально отправлять (по умолчанию пробный прогон)",
+    )
+    p_deliver.set_defaults(func=cmd_deliver)
 
     return parser
 

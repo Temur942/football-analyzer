@@ -423,3 +423,89 @@ async def competition_ids(pool: asyncpg.Pool) -> list[str]:
             """
         )
     return [row["competition_id"] for row in rows]
+
+
+async def due_matches(pool: asyncpg.Pool, lead_hours: int) -> list[asyncpg.Record]:
+    """Матчи, до которых осталось не больше lead_hours и которые ещё не начались."""
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            """
+            SELECT m.id, m.competition_id, c.name_ru, m.home_team, m.away_team,
+                   m.kickoff_utc
+              FROM matches m
+              JOIN competitions c ON c.id = m.competition_id
+             WHERE m.status = 'scheduled'
+               AND m.kickoff_utc > now()
+               AND m.kickoff_utc <= now() + $1
+             ORDER BY m.kickoff_utc
+            """,
+            timedelta(hours=lead_hours),
+        )
+
+
+async def active_subscribers(pool: asyncpg.Pool) -> list[asyncpg.Record]:
+    """Подписчики с действующей подпиской."""
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            """
+            SELECT chat_id, username
+              FROM subscribers
+             WHERE is_active
+               AND paid_until IS NOT NULL
+               AND paid_until > now()
+             ORDER BY chat_id
+            """
+        )
+
+
+async def save_prediction(
+    pool: asyncpg.Pool, match_id: int, model_version: str, payload: str
+) -> None:
+    """Сохранить прогноз (пересчёт того же матча перезаписывает запись)."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO predictions (match_id, model_version, payload)
+            VALUES ($1, $2, $3::jsonb)
+            ON CONFLICT (match_id, model_version) DO UPDATE SET
+                payload = EXCLUDED.payload,
+                created_at = now()
+            """,
+            match_id,
+            model_version,
+            payload,
+        )
+
+
+async def try_insert_delivery(
+    pool: asyncpg.Pool, match_id: int, chat_id: int, status: str, error: str | None = None
+) -> bool:
+    """Зафиксировать отправку. False — уже было (значит, повторять не надо)."""
+    async with pool.acquire() as conn:
+        try:
+            await conn.execute(
+                """
+                INSERT INTO deliveries (match_id, chat_id, status, error)
+                VALUES ($1, $2, $3, $4)
+                """,
+                match_id,
+                chat_id,
+                status,
+                error,
+            )
+        except asyncpg.UniqueViolationError:
+            return False
+    return True
+
+
+async def delivery_stats(pool: asyncpg.Pool) -> dict[str, int]:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT count(*) FILTER (WHERE status = 'sent') AS sent,
+                   count(*) FILTER (WHERE status = 'dry_run') AS dry_run,
+                   count(*) FILTER (WHERE status = 'failed') AS failed
+              FROM deliveries
+            """
+        )
+    return {key: int(row[key] or 0) for key in ("sent", "dry_run", "failed")}

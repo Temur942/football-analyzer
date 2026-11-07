@@ -1,0 +1,19 @@
+# =============================================================================
+# football-analyzer — таймер рассылки прогнозов.
+#
+# Раз в 10 минут проверяем, не вошёл ли матч в окно «за 5 часов». Повторной
+# отправки не будет: журнал deliveries защищён первичным ключом
+# (match_id, chat_id).
+# =============================================================================
+
+[Unit]
+Description=football-analyzer: проверка окна рассылки, каждые 10 минут
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=10min
+AccuracySec=30s
+Unit=football-analyzer-deliver.service
+
+[Install]
+WantedBy=timers.target
