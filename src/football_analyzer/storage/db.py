@@ -673,3 +673,89 @@ async def pending_posts(pool: asyncpg.Pool) -> int:
             await conn.fetchval("SELECT count(*) FROM channel_posts WHERE published_at IS NULL")
             or 0
         )
+
+
+async def log_event(pool: asyncpg.Pool, chat_id: int, name: str, meta: str | None = None) -> None:
+    """Записать шаг воронки. Ошибки записи не должны ломать сценарий бота."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO events (chat_id, name, meta) VALUES ($1, $2, $3::jsonb)",
+            chat_id,
+            name,
+            meta,
+        )
+
+
+async def funnel(pool: asyncpg.Pool) -> list[asyncpg.Record]:
+    """Сколько уникальных пользователей дошло до каждого шага."""
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            """
+            SELECT name,
+                   count(DISTINCT chat_id) AS users,
+                   count(*) AS total
+              FROM events
+             GROUP BY name
+             ORDER BY users DESC
+            """
+        )
+
+
+async def set_referrer(pool: asyncpg.Pool, chat_id: int, referrer: int) -> bool:
+    """Записать, кто пригласил. False — если себя или уже был приглашён."""
+    if chat_id == referrer:
+        return False
+    async with pool.acquire() as conn:
+        existing = await conn.fetchval(
+            "SELECT referred_by FROM subscribers WHERE chat_id = $1", chat_id
+        )
+        if existing:
+            return False
+        await conn.execute(
+            """
+            INSERT INTO subscribers (chat_id, referred_by, referred_at)
+            VALUES ($1, $2, now())
+            ON CONFLICT (chat_id) DO UPDATE SET
+                referred_by = EXCLUDED.referred_by,
+                referred_at = now(),
+                updated_at = now()
+             WHERE subscribers.referred_by IS NULL
+            """,
+            chat_id,
+            referrer,
+        )
+    return True
+
+
+async def grant_days(pool: asyncpg.Pool, chat_id: int, days: int) -> datetime:
+    """Продлить подписку на N дней (от текущей даты окончания или от сегодня)."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            INSERT INTO subscribers (chat_id, paid_until)
+            VALUES ($1, now() + $2)
+            ON CONFLICT (chat_id) DO UPDATE SET
+                paid_until = GREATEST(coalesce(subscribers.paid_until, now()), now()) + $2,
+                updated_at = now()
+            RETURNING paid_until
+            """,
+            chat_id,
+            timedelta(days=days),
+        )
+    return row["paid_until"]
+
+
+async def referral_bonus(pool: asyncpg.Pool, invited_chat_id: int, days: int = 7) -> int | None:
+    """Начислить бонус пригласившему, если приглашённый оплатил подписку.
+
+    Вызывается в момент активации подписки. Возвращает id пригласившего или None.
+    """
+    async with pool.acquire() as conn:
+        referrer = await conn.fetchval(
+            "SELECT referred_by FROM subscribers WHERE chat_id = $1 AND referred_by IS NOT NULL",
+            invited_chat_id,
+        )
+    if referrer is None:
+        return None
+    await grant_days(pool, int(referrer), days)
+    return int(referrer)

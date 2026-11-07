@@ -919,6 +919,69 @@ def cmd_publish_now(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _funnel(dsn: str) -> list[tuple[str, int, int]]:
+    pool = await db.connect(dsn)
+    try:
+        await db.apply_schema(pool)
+        rows = await db.funnel(pool)
+    finally:
+        await pool.close()
+    return [(row["name"], int(row["users"]), int(row["total"])) for row in rows]
+
+
+def cmd_funnel(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        rows = asyncio.run(_funnel(settings.require_database_url()))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+
+    order = ["start", "consent", "tariff_view", "buy_click", "pay_click"]
+    by_name = {name: (users, total) for name, users, total in rows}
+    print("=" * 64)
+    print("  ВОРОНКА: уникальные пользователи по шагам")
+    print("=" * 64)
+    previous: int | None = None
+    for name in order:
+        users, total = by_name.get(name, (0, 0))
+        conversion = ""
+        if previous:
+            conversion = "  (%d%% от предыдущего)" % round(100 * users / previous)
+        print("  %-12s %6d  событий: %d%s" % (name, users, total, conversion))
+        previous = users or None
+    other = [row for row in rows if row[0] not in order]
+    if other:
+        print("  —")
+        for name, users, total in other:
+            print("  %-12s %6d  событий: %d" % (name, users, total))
+    print("=" * 64)
+    return EXIT_OK
+
+
+async def _grant_days(dsn: str, chat_id: int, days: int) -> str:
+    pool = await db.connect(dsn)
+    try:
+        await db.apply_schema(pool)
+        paid_until = await db.grant_days(pool, chat_id, days)
+    finally:
+        await pool.close()
+    return paid_until.strftime("%d.%m.%Y")
+
+
+def cmd_grant_days(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        paid_until = asyncio.run(
+            _grant_days(settings.require_database_url(), args.chat_id, args.days)
+        )
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    print("Подписка для %d продлена: до %s" % (args.chat_id, paid_until))
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -1016,6 +1079,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_publish = sub.add_parser("publish-now", help="опубликовать следующий пост вручную")
     p_publish.add_argument("--channel", default=None)
     p_publish.set_defaults(func=cmd_publish_now)
+
+    p_funnel = sub.add_parser("funnel", help="воронка: шаги start → consent → оплата")
+    p_funnel.set_defaults(func=cmd_funnel)
+
+    p_grant = sub.add_parser("grant-days", help="выдать или продлить подписку")
+    p_grant.add_argument("--chat-id", type=int, required=True)
+    p_grant.add_argument("--days", type=int, default=30)
+    p_grant.set_defaults(func=cmd_grant_days)
 
     return parser
 

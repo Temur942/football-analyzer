@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 import asyncpg
 from aiogram import F, Router
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (
     CallbackQuery,
     ChatMemberUpdated,
@@ -153,8 +153,49 @@ def subscription_text(paid_until: datetime | None) -> str:
     return "✅ <b>Подписка активна</b> до %s" % paid_until.strftime("%d.%m.%Y")
 
 
+async def _event(pool: asyncpg.Pool | None, chat_id: int, name: str) -> None:
+    """Шаг воронки. Сбой записи не должен мешать основному сценарию."""
+    if pool is None:
+        return
+    try:
+        await db.log_event(pool, chat_id, name)
+    except Exception as exc:  # noqa: BLE001
+        log.error("не удалось записать событие %s: %s", name, exc)
+
+
+def _referrer_from(payload: str | None) -> int | None:
+    """Достать id пригласившего из ?start=ref_<id>."""
+    if not payload or not payload.startswith("ref_"):
+        return None
+    try:
+        return int(payload.removeprefix("ref_"))
+    except ValueError:
+        return None
+
+
 @router.message(CommandStart())
-async def handle_start(message: Message, has_access: bool = True, has_consent: bool = True) -> None:
+async def handle_start(
+    message: Message,
+    command: CommandObject | None = None,
+    pool: asyncpg.Pool | None = None,
+    has_access: bool = True,
+    has_consent: bool = True,
+) -> None:
+    user = message.from_user
+    if user is None:
+        return
+    # Реферальная ссылка: ?start=ref_<id>
+    referrer = _referrer_from(command.args if command else None)
+    if referrer is not None and pool is not None:
+        try:
+            if await db.set_referrer(pool, user.id, referrer):
+                await message.answer(
+                    "🎁 Вас пригласил друг: когда оформите подписку, он получит бонусные дни."
+                )
+        except Exception as exc:  # noqa: BLE001
+            log.error("не удалось записать пригласившего: %s", exc)
+    await _event(pool, user.id, "start")
+
     if not has_consent:
         await message.answer(CONSENT_TEXT, reply_markup=consent_keyboard())
         return
@@ -170,6 +211,7 @@ async def handle_start(message: Message, has_access: bool = True, has_consent: b
 @router.callback_query(F.data == "consent_yes")
 async def handle_consent_yes(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
     user = callback.from_user
+    await _event(pool, user.id, "consent")
     if pool is not None:
         try:
             await db.record_consent(pool, user.id, user.username)
@@ -345,21 +387,24 @@ async def handle_tariffs(message: Message) -> None:
 
 
 @router.callback_query(F.data == CALLBACK_TARIFFS)
-async def handle_tariffs_button(callback: CallbackQuery) -> None:
+async def handle_tariffs_button(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
+    await _event(pool, callback.from_user.id, "tariff_view")
     if callback.message:
         await callback.message.answer(tariffs_text(), reply_markup=tariffs_menu())
     await callback.answer()
 
 
 @router.callback_query(F.data == CALLBACK_BUY)
-async def handle_buy(callback: CallbackQuery) -> None:
+async def handle_buy(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
+    await _event(pool, callback.from_user.id, "buy_click")
     if callback.message:
         await callback.message.answer(order_text(), reply_markup=order_menu())
     await callback.answer()
 
 
 @router.callback_query(F.data == CALLBACK_PAY)
-async def handle_pay(callback: CallbackQuery) -> None:
+async def handle_pay(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
+    await _event(pool, callback.from_user.id, "pay_click")
     # Здесь будет вызов ЮKassa: создание платежа и ссылка на оплату.
     if callback.message:
         await callback.message.answer(
