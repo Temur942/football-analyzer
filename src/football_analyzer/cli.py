@@ -17,6 +17,7 @@ import math
 import sys
 from collections import defaultdict
 from datetime import UTC, datetime
+from pathlib import Path
 
 import aiohttp
 
@@ -842,6 +843,40 @@ def cmd_selftest_delivery(args: argparse.Namespace) -> int:
     return EXIT_PROBLEM
 
 
+def load_posts(path: str) -> list[dict]:
+    """Прочитать очередь постов. Синхронно — вызывается до работы с базой."""
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    return data.get("posts") or []
+
+
+async def _seed_posts(dsn: str, path: str) -> tuple[int, int]:
+    posts = load_posts(path)
+    pool = await db.connect(dsn)
+    try:
+        await db.apply_schema(pool)
+        added = await db.add_posts(pool, posts)
+        pending = await db.pending_posts(pool)
+    finally:
+        await pool.close()
+    return added, pending
+
+
+def cmd_seed_posts(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        added, pending = asyncio.run(_seed_posts(settings.require_database_url(), args.file))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    print("=" * 60)
+    print("  ОЧЕРЕДЬ ПУБЛИКАЦИЙ")
+    print("=" * 60)
+    print("  Добавлено постов:   %d" % added)
+    print("  Ждёт публикации:    %d" % pending)
+    print("=" * 60)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -931,6 +966,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_selftest.add_argument("--lead-hours", type=int, default=72)
     p_selftest.set_defaults(func=cmd_selftest_delivery)
+
+    p_seed = sub.add_parser("seed-posts", help="загрузить очередь постов в канал")
+    p_seed.add_argument("--file", default="docs/marketing/posts.json")
+    p_seed.set_defaults(func=cmd_seed_posts)
 
     return parser
 

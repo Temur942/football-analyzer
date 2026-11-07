@@ -14,6 +14,7 @@ from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import (
     CallbackQuery,
+    ChatMemberUpdated,
     InlineKeyboardMarkup,
     Message,
 )
@@ -199,6 +200,28 @@ def doc_nav() -> InlineKeyboardMarkup:
     builder.button(text="✖️ Закрыть", callback_data="docs_close")
     builder.adjust(2)
     return builder.as_markup()
+
+
+@router.channel_post()
+async def log_channel_post(message: Message) -> None:
+    """Любое сообщение в канале: печатаем chat_id — он нужен для публикаций."""
+    log.warning(
+        "CHANNEL_ID=%s | канал: %s | текст: %s",
+        message.chat.id,
+        message.chat.title,
+        (message.text or "")[:40],
+    )
+
+
+@router.my_chat_member()
+async def log_chat_member(event: ChatMemberUpdated) -> None:
+    """Бота добавили в канал — тоже фиксируем id."""
+    log.warning(
+        "CHANNEL_ID=%s | канал: %s | статус: %s",
+        event.chat.id,
+        event.chat.title,
+        event.new_chat_member.status,
+    )
 
 
 @router.message(Command("stats"))

@@ -20,6 +20,7 @@ from football_analyzer.bot import handlers
 from football_analyzer.bot.access import AccessMiddleware
 from football_analyzer.config import get_settings
 from football_analyzer.scheduler.delivery import deliver_due
+from football_analyzer.scheduler.publisher import publish_next
 from football_analyzer.storage import db
 
 log = logging.getLogger(__name__)
@@ -94,6 +95,32 @@ async def main() -> None:
             log.error("рассылка не удалась: %s", exc)
 
     scheduler.add_job(send_due_forecasts, "interval", minutes=10, id="deliver")
+
+    async def publish_to_channel() -> None:
+        """Пост в канал: 10:00 и 18:00 МСК."""
+        if pool is None or not settings.channel_id:
+            return
+        try:
+            await publish_next(bot, pool, settings.channel_id)
+        except Exception as exc:  # noqa: BLE001
+            log.error("публикация в канал не удалась: %s", exc)
+
+    scheduler.add_job(
+        publish_to_channel,
+        "cron",
+        hour=10,
+        minute=0,
+        timezone="Europe/Moscow",
+        id="publish_morning",
+    )
+    scheduler.add_job(
+        publish_to_channel,
+        "cron",
+        hour=18,
+        minute=0,
+        timezone="Europe/Moscow",
+        id="publish_evening",
+    )
     scheduler.start()
 
     try:

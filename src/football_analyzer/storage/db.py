@@ -630,3 +630,46 @@ async def recent_subscribers(pool: asyncpg.Pool, limit: int = 10) -> list[asyncp
             """,
             limit,
         )
+
+
+async def next_post(pool: asyncpg.Pool) -> asyncpg.Record | None:
+    """Следующий пост очереди, который ещё не публиковали."""
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
+            "SELECT id, kind, body FROM channel_posts"
+            " WHERE published_at IS NULL ORDER BY id LIMIT 1"
+        )
+
+
+async def mark_posted(pool: asyncpg.Pool, post_id: int) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE channel_posts SET published_at = now() WHERE id = $1", post_id)
+
+
+async def add_posts(pool: asyncpg.Pool, posts: list[dict]) -> int:
+    """Добавить посты, пропуская точные дубликаты текста."""
+    added = 0
+    async with pool.acquire() as conn:
+        for post in posts:
+            exists = await conn.fetchval(
+                "SELECT 1 FROM channel_posts WHERE body = $1 AND kind = $2",
+                post.get("body"),
+                post.get("kind", "text"),
+            )
+            if exists:
+                continue
+            await conn.execute(
+                "INSERT INTO channel_posts (kind, body) VALUES ($1, $2)",
+                post.get("kind", "text"),
+                post.get("body"),
+            )
+            added += 1
+    return added
+
+
+async def pending_posts(pool: asyncpg.Pool) -> int:
+    async with pool.acquire() as conn:
+        return int(
+            await conn.fetchval("SELECT count(*) FROM channel_posts WHERE published_at IS NULL")
+            or 0
+        )
