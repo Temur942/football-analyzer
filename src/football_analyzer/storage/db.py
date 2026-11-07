@@ -553,3 +553,37 @@ async def has_active_subscription(pool: asyncpg.Pool, chat_id: int) -> bool:
             chat_id,
         )
     return row is not None
+
+
+# Версия текста согласия. Растёт, если меняется формулировка, и тогда согласие
+# запрашивается заново — старое согласие на новый текст не распространяется.
+CONSENT_VERSION = "1.0"
+
+
+async def has_consent(pool: asyncpg.Pool, chat_id: int) -> bool:
+    """Дал ли пользователь согласие на текущую редакцию."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT consent_version FROM subscribers WHERE chat_id = $1", chat_id
+        )
+    return bool(row and row["consent_version"] == CONSENT_VERSION)
+
+
+async def record_consent(pool: asyncpg.Pool, chat_id: int, username: str | None) -> None:
+    """Зафиксировать согласие (создаёт запись, если пользователь новый)."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO subscribers (chat_id, username, consent_version, consent_at, age_confirmed)
+            VALUES ($1, $2, $3, now(), TRUE)
+            ON CONFLICT (chat_id) DO UPDATE SET
+                username = COALESCE(EXCLUDED.username, subscribers.username),
+                consent_version = EXCLUDED.consent_version,
+                consent_at = now(),
+                age_confirmed = TRUE,
+                updated_at = now()
+            """,
+            chat_id,
+            username,
+            CONSENT_VERSION,
+        )

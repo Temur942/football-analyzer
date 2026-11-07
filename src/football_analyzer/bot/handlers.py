@@ -21,7 +21,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from football_analyzer.analysis.forecast import build_forecast, render_text
 from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models
-from football_analyzer.bot.access import BETA_TEXT
+from football_analyzer.bot.access import BETA_TEXT, CONSENT_TEXT
+from football_analyzer.bot.docs import DOCUMENTS, send_document
 from football_analyzer.config import get_settings
 from football_analyzer.storage import db
 
@@ -40,6 +41,27 @@ def main_menu() -> InlineKeyboardMarkup:
     builder.button(text="📊 Прогноз на сегодня", callback_data="today")
     builder.button(text="💳 Тарифы и подписка", callback_data=CALLBACK_TARIFFS)
     builder.button(text="ℹ️ Как это работает", callback_data="about")
+    builder.button(text="📄 Документы", callback_data="docs_menu")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def consent_keyboard() -> InlineKeyboardMarkup:
+    """Кнопки экрана согласия. Документы доступны ДО согласия."""
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Согласен, продолжить", callback_data="consent_yes")
+    builder.button(text="📄 Публичная оферта", callback_data="doc_offer")
+    builder.button(text="📄 Политика ПД", callback_data="doc_privacy")
+    builder.button(text="❌ Не согласен", callback_data="consent_no")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def docs_menu() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for key, (title, _) in DOCUMENTS.items():
+        builder.button(text=title, callback_data="doc_" + key)
+    builder.button(text="⬅️ В меню", callback_data=CALLBACK_BACK)
     builder.adjust(1)
     return builder.as_markup()
 
@@ -130,7 +152,10 @@ def subscription_text(paid_until: datetime | None) -> str:
 
 
 @router.message(CommandStart())
-async def handle_start(message: Message, has_access: bool = True) -> None:
+async def handle_start(message: Message, has_access: bool = True, has_consent: bool = True) -> None:
+    if not has_consent:
+        await message.answer(CONSENT_TEXT, reply_markup=consent_keyboard())
+        return
     if not has_access:
         # Закрытая бета: показываем свой ID, чтобы владелец мог добавить
         # человека в админы вручную.
@@ -138,6 +163,49 @@ async def handle_start(message: Message, has_access: bool = True) -> None:
         await message.answer(BETA_TEXT % user_id)
         return
     await message.answer(start_text(), reply_markup=main_menu())
+
+
+@router.callback_query(F.data == "consent_yes")
+async def handle_consent_yes(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
+    user = callback.from_user
+    if pool is not None:
+        try:
+            await db.record_consent(pool, user.id, user.username)
+        except Exception as exc:  # noqa: BLE001
+            log.error("не удалось записать согласие: %s", exc)
+    if callback.message:
+        await callback.message.answer(start_text(), reply_markup=main_menu())
+    await callback.answer("Согласие сохранено")
+
+
+@router.callback_query(F.data == "consent_no")
+async def handle_consent_no(callback: CallbackQuery) -> None:
+    if callback.message:
+        await callback.message.answer(
+            "Без согласия на обработку данных Сервис работать не может. "
+            "Если передумаете — нажмите /start."
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "docs_menu")
+async def handle_docs_menu(callback: CallbackQuery) -> None:
+    if callback.message:
+        await callback.message.answer(
+            "📄 <b>Документы</b>\n\nВыберите, что открыть:", reply_markup=docs_menu()
+        )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("doc_"))
+async def handle_document(callback: CallbackQuery) -> None:
+    key = (callback.data or "").removeprefix("doc_")
+    if isinstance(callback.message, Message) and key in DOCUMENTS:
+        try:
+            await send_document(callback.message, key)
+        except FileNotFoundError:
+            await callback.message.answer("Документ временно недоступен.")
+    await callback.answer()
 
 
 @router.message(Command("myid"))

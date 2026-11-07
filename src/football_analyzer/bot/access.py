@@ -24,7 +24,26 @@ from football_analyzer.storage import db
 
 log = logging.getLogger(__name__)
 
-ALLOWED_COMMANDS = ("/start", "/help", "/myid", "/start@", "/help@", "/myid@")
+ALLOWED_COMMANDS = ("/start", "/help", "/myid", "/docs", "/start@", "/help@", "/myid@", "/docs@")
+# Эти кнопки нажимаются до согласия — иначе человек не сможет его дать.
+CONSENT_CALLBACKS = ("consent_yes", "consent_no", "doc_offer", "doc_terms", "doc_privacy")
+
+CONSENT_TEXT = (
+    "👋 <b>Перед началом работы</b>\n\n"
+    "Сервис предназначен для лиц <b>18 лет и старше</b>.\n\n"
+    "Я предоставляю <b>математический анализ</b> матчей — вероятности событий, "
+    "а не гарантии результата, не советы по ставкам и не призыв к ним. "
+    "Решения вы принимаете самостоятельно.\n\n"
+    "Для работы нужны ваши данные: идентификатор Telegram, имя пользователя, "
+    "сведения о подписке и платежах. Данные банковской карты мне не передаются — "
+    "их обрабатывает ЮKassa.\n\n"
+    "Данные хранятся на серверах <b>в Российской Федерации</b>. Для доставки "
+    "сообщений идентификатор Telegram и текст сообщения передаются сервису "
+    "<b>Telegram</b> за пределами РФ — это трансграничная передача по ст. 12 "
+    "152-ФЗ, и она выполняется с вашего согласия.\n\n"
+    "Нажимая «Согласен», вы подтверждаете возраст 18+, согласие на обработку "
+    "персональных данных и на трансграничную передачу."
+)
 
 BETA_TEXT = (
     "🔒 <b>Закрытая бета</b>\n\n"
@@ -65,8 +84,39 @@ class AccessMiddleware(BaseMiddleware):
         if not has_access and self.pool is not None:
             has_access = await db.has_active_subscription(self.pool, user.id)
 
+        # Согласие по 152-ФЗ нужно ДО любой обработки и до оплаты.
+        has_consent = False
+        if self.pool is not None:
+            try:
+                has_consent = await db.has_consent(self.pool, user.id)
+            except Exception as exc:  # noqa: BLE001
+                log.error("не удалось проверить согласие: %s", exc)
+        data["has_consent"] = has_consent
         data["has_access"] = has_access
         data["is_admin"] = user.id in admin_ids
+
+        if not has_consent:
+            kind = (
+                "callback:" + str(getattr(event, "data", ""))
+                if isinstance(event, CallbackQuery)
+                else "message:" + str(getattr(event, "text", ""))
+            )
+            log.info("нет согласия: id=%s | %s", user.id, kind[:60])
+            if isinstance(event, CallbackQuery):
+                if event.data in CONSENT_CALLBACKS:
+                    return await handler(event, data)
+                await event.answer(
+                    "Сначала подтвердите согласие на обработку данных", show_alert=True
+                )
+                return None
+            if isinstance(event, Message) and _is_allowed_command(event):
+                return await handler(event, data)
+            if isinstance(event, Message):
+                await event.answer(
+                    "Чтобы пользоваться Сервисом, нужно согласие на обработку "
+                    "персональных данных. Нажмите /start."
+                )
+            return None
 
         # Диагностика: видно, что именно пришло и что мы решили. Без этого
         # «бот молчит» не отличить от «бот не получил сообщение».
