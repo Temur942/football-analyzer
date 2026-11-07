@@ -113,6 +113,23 @@ def tariffs_text() -> str:
     return "\n".join(lines)
 
 
+def onboarding_text() -> str:
+    """Первое сообщение после согласия: что нажимать и как выглядит прогноз."""
+    return (
+        "🎓 <b>Как пользоваться</b>\n\n"
+        "1. Нажмите «📊 Прогноз на сегодня» — бот посчитает ближайшие матчи.\n"
+        "2. Дальше прогнозы будут приходить сами, за 5 часов до матча.\n"
+        "3. «⭐ Моя подписка» — срок и тарифы, /faq — частые вопросы.\n\n"
+        "Вот как выглядит прогноз:\n\n"
+        "⚽ <b>Команда А — Команда Б</b>\n"
+        "🕐 сегодня, 20:30 МСК\n\n"
+        "🎯 Исход: П1 52% · Х 24% · П2 23%\n"
+        "🥅 Тотал: ТБ 1,5 — 79% · ТБ 2,5 — 56% · ТБ 3,5 — 33%\n"
+        "🔮 Счёт: 1:1 11% · 2:1 10% · 1:0 9%\n\n"
+        "Это вероятности, а не гарантии. 18+."
+    )
+
+
 def about_text() -> str:
     return (
         "ℹ️ <b>Как это работает</b>\n\n"
@@ -249,7 +266,7 @@ async def handle_consent_yes(callback: CallbackQuery, pool: asyncpg.Pool | None 
                 "Проверьте прогнозы и решите, нужна ли подписка."
                 % (TRIAL_DAYS, trial_until.strftime("%d.%m.%Y"))
             )
-        await callback.message.answer(start_text(), reply_markup=main_menu())
+        await callback.message.answer(onboarding_text(), reply_markup=main_menu())
     await callback.answer("Согласие сохранено")
 
 
