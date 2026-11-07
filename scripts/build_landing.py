@@ -16,6 +16,11 @@ PAGES = {
     "privacy.md": ("Политика обработки персональных данных", "privacy.html"),
 }
 
+FONTS = (
+    '<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;700'
+    '&display=swap" rel="stylesheet">'
+)
+
 TEMPLATE = """<!doctype html>
 <html lang="ru">
 <head>
@@ -24,7 +29,7 @@ TEMPLATE = """<!doctype html>
 <title>{title} — Football Analyzer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;700&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet">
+{fonts}
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -102,7 +107,9 @@ def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     for source, (title, target) in PAGES.items():
         body = convert((LEGAL / source).read_text(encoding="utf-8"))
-        (OUT / target).write_text(TEMPLATE.format(title=title, body=body), encoding="utf-8")
+        (OUT / target).write_text(
+            TEMPLATE.format(title=title, body=body, fonts=FONTS), encoding="utf-8"
+        )
         print("собрано:", target)
 
     accuracy = OUT / "accuracy.json"
