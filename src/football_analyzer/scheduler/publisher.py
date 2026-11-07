@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 
 import asyncpg
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from football_analyzer.analysis.forecast import build_forecast, render_text
+from football_analyzer.analysis.forecast import MSK, Forecast, build_forecast
 from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models
 from football_analyzer.storage import db
 
@@ -24,25 +25,44 @@ PREFERRED_LEAGUES = (
 )
 
 
-def post_text(forecast: object, competition_name: str) -> str:
-    """Короткая версия прогноза для канала — без полной раскладки."""
-    full = render_text(forecast, competition_name)  # type: ignore[arg-type]
-    lines = full.splitlines()
-    keep = []
-    for line in lines:
-        # В канал — заголовок, время, исход, тотал, счёт и призыв в бота.
-        if line.startswith(("⚽", "🏆", "🕐")):
-            keep.append(line)
-        elif line.startswith(("🎯", "🥅", "🔮")):
-            keep.append(line)
-            continue
-        elif keep and keep[-1].startswith(("🎯", "🥅", "🔮")):
-            keep.append(line)
-    header = "\n".join(keep)
-    return (
-        header
-        + "\n\nПолная раскладка — углы, карточки, голы команд — в боте за 5 часов до матча:\n"
-        "@footballizator_bot\n\n<i>18+. Вероятности, не гарантии.</i>"
+def post_text(forecast: Forecast, competition_name: str) -> str:
+    """Короткий пост для канала: главное, без полной раскладки.
+
+    Собираем явно из чисел прогноза, а не обрезаем длинный текст: обрезка
+    уже один раз оставила в «Исходе» только строку про хозяев.
+    """
+    kickoff = forecast.kickoff_utc.astimezone(MSK)
+
+    def pct(value: float) -> str:
+        return "%d%%" % round(value * 100)
+
+    def line(value: float) -> str:
+        return ("%.1f" % value).replace(".", ",")
+
+    total = " · ".join(
+        "ТБ %s — <b>%s</b>" % (line(value_line), pct(probability))
+        for value_line, probability in forecast.total.items()
+    )
+    scores = " · ".join(
+        "<b>%d:%d</b> %s" % (home, away, pct(probability))
+        for home, away, probability in forecast.scores
+    )
+    return "\n".join(
+        [
+            "⚽ <b>%s — %s</b>" % (forecast.home_team, forecast.away_team),
+            "🏆 %s" % competition_name,
+            "🕐 %s МСК" % kickoff.strftime("%d.%m, %H:%M"),
+            "",
+            "🎯 <b>Исход:</b> П1 %s · Х %s · П2 %s"
+            % (pct(forecast.p_home), pct(forecast.p_draw), pct(forecast.p_away)),
+            "🥅 <b>Тотал:</b> " + total,
+            "🔮 <b>Счёт:</b> " + scores,
+            "",
+            "Полная раскладка — углы, карточки, голы команд — в боте за 5 часов до матча:",
+            "@footballizator_bot",
+            "",
+            "<i>18+. Вероятности, не гарантии.</i>",
+        ]
     )
 
 
@@ -100,7 +120,14 @@ async def publish_next(bot: object, pool: asyncpg.Pool, channel_id: str) -> bool
             log.warning("пост-прогноз не собран: нет матчей")
             return False
 
-    await bot.send_message(channel_id, text)  # type: ignore[attr-defined]
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть бота", url="https://t.me/footballizator_bot")]
+        ]
+    )
+    await bot.send_message(  # type: ignore[attr-defined]
+        channel_id, text, reply_markup=keyboard
+    )
     await db.mark_posted(pool, row["id"])
     log.info("опубликован пост id=%s", row["id"])
     return True

@@ -877,6 +877,48 @@ def cmd_seed_posts(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _publish_now(dsn: str, channel_id: str) -> tuple[bool, str]:
+    from aiogram import Bot
+    from aiogram.client.default import DefaultBotProperties
+    from aiogram.enums import ParseMode
+
+    from football_analyzer.scheduler.publisher import publish_next
+
+    settings = get_settings()
+    bot = Bot(
+        token=settings.require_bot_token(),
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+    )
+    pool = await db.connect(dsn)
+    try:
+        published = await publish_next(bot, pool, channel_id)
+        pending = await db.pending_posts(pool)
+    finally:
+        await pool.close()
+        await bot.session.close()
+    return published, str(pending)
+
+
+def cmd_publish_now(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    channel_id = args.channel or settings.channel_id
+    if not channel_id:
+        print("ОШИБКА: не задан CHANNEL_ID", file=sys.stderr)
+        return EXIT_PROBLEM
+    try:
+        published, pending = asyncio.run(_publish_now(settings.require_database_url(), channel_id))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    print("=" * 60)
+    print("  ПУБЛИКАЦИЯ В КАНАЛ")
+    print("=" * 60)
+    print("  Опубликовано:      %s" % ("да" if published else "нет"))
+    print("  Осталось в очереди: %s" % pending)
+    print("=" * 60)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -970,6 +1012,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_seed = sub.add_parser("seed-posts", help="загрузить очередь постов в канал")
     p_seed.add_argument("--file", default="docs/marketing/posts.json")
     p_seed.set_defaults(func=cmd_seed_posts)
+
+    p_publish = sub.add_parser("publish-now", help="опубликовать следующий пост вручную")
+    p_publish.add_argument("--channel", default=None)
+    p_publish.set_defaults(func=cmd_publish_now)
 
     return parser
 
