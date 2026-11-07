@@ -20,10 +20,24 @@ SERVER="${SERVER:-root@168.113.176.166}"
 LOCAL_PORT="${LOCAL_PORT:-15432}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-if ! curl -s -o /dev/null -m 10 https://api.telegram.org/; then
+telegram_ok() {
+  curl -s -o /dev/null -m 8 https://api.telegram.org/
+}
+
+if ! telegram_ok && [ "${WAIT_FOR_TELEGRAM:-0}" = "1" ]; then
+  echo "Telegram пока недоступен. Жду включения VPN (до 30 минут)..."
+  for _ in $(seq 1 360); do
+    sleep 5
+    if telegram_ok; then
+      break
+    fi
+  done
+fi
+
+if ! telegram_ok; then
   echo "ОШИБКА: Telegram недоступен с этой машины." >&2
-  echo "Без доступа к api.telegram.org бот не запустится — это сеть, а не код." >&2
-  echo "Проверьте: curl -s -o /dev/null -w '%{http_code}\\n' https://api.telegram.org/" >&2
+  echo "Включите VPN так, чтобы он покрывал весь трафик, и запустите:" >&2
+  echo "  WAIT_FOR_TELEGRAM=1 bash scripts/run_bot_local.sh" >&2
   exit 1
 fi
 echo "Telegram доступен"
