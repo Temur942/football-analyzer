@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -68,8 +69,37 @@ async def main() -> None:
 
     scheduler = AsyncIOScheduler(timezone="UTC")
 
+    # Сбои подряд: одиночная ошибка — шум, три подряд — уже событие для канала.
+    failure_streak: dict[str, int] = {"delivery": 0, "publish": 0}
+    last_channel_alert: dict[str, float] = {}
+    CHANNEL_ALERT_COOLDOWN_SECONDS = 6 * 3600
+    CHANNEL_ALERT_THRESHOLD = 3
+
     async def deliver_to_chat(chat_id: int, text: str) -> None:
         await bot.send_message(chat_id, text)
+
+    async def notify_channel_failure(kind: str, exc: Exception) -> None:
+        """Написать в канал, если сбои повторяются, но не чаще раза в 6 часов.
+
+        Одиночный сбой не повод пугать подписчиков; три подряд — честнее
+        сказать «работаем», чем молчать.
+        """
+        if not settings.channel_id:
+            return
+        if failure_streak.get(kind, 0) < CHANNEL_ALERT_THRESHOLD:
+            return
+        now = time.time()
+        if now - last_channel_alert.get(kind, 0) < CHANNEL_ALERT_COOLDOWN_SECONDS:
+            return
+        last_channel_alert[kind] = now
+        failure_streak[kind] = 0
+        try:
+            await bot.send_message(
+                settings.channel_id,
+                "WARN технические работы: часть прогнозов задерживается. Оплаченное не пропадёт.",
+            )
+        except Exception:  # noqa: BLE001
+            log.error("не удалось предупредить канал о сбое")
 
     async def send_due_forecasts() -> None:
         """Разослать прогнозы админам за N часов до матча.
@@ -89,6 +119,7 @@ async def main() -> None:
             )
             if report.sent:
                 log.info("прогнозов отправлено: %d", report.sent)
+            failure_streak["delivery"] = 0
             if report.failed:
                 log.warning("не отправлено: %d", report.failed)
             # Алерт админу: молчаливый сбой рассылки — худший вид сбоя.
@@ -104,6 +135,8 @@ async def main() -> None:
                         continue
         except Exception as exc:  # noqa: BLE001
             log.error("рассылка не удалась: %s", exc)
+            failure_streak["delivery"] += 1
+            await notify_channel_failure("delivery", exc)
             for admin_id in settings.admin_ids:
                 try:
                     await bot.send_message(admin_id, "Рассылка упала: %s" % exc)
@@ -143,6 +176,8 @@ async def main() -> None:
             await publish_next(bot, pool, settings.channel_id)
         except Exception as exc:  # noqa: BLE001
             log.error("публикация в канал не удалась: %s", exc)
+            failure_streak["publish"] += 1
+            await notify_channel_failure("publish", exc)
             for admin_id in settings.admin_ids:
                 try:
                     await bot.send_message(admin_id, "Пост в канал не ушёл: %s" % exc)
