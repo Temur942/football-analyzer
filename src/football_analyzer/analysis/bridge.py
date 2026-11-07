@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 
 from scipy.optimize import minimize
 
+from football_analyzer.analysis.poisson import poisson_over
 from football_analyzer.analysis.ratings import MatchRow, Rates, fit_rates
 
 log = logging.getLogger(__name__)
@@ -47,6 +48,11 @@ class CrossRates:
     cup_corners_away: float = 4.6
     cup_yellow_home: float = 2.2
     cup_yellow_away: float = 2.4
+
+    # Поправка на темп матча: (b, a, c, e) для
+    # P = sigmoid(b + a*logit(p0) + c*|dgosl| + e*sum_golov).
+    corner_model: dict[float, tuple[float, float, float, float]] = field(default_factory=dict)
+    yellow_model: dict[float, tuple[float, float, float, float]] = field(default_factory=dict)
 
     def _league(self, team: str) -> str | None:
         return self.team_league.get(team)
@@ -220,6 +226,91 @@ def fit_league_strength(
     mean = sum(values) / len(values)
     values = [value - mean for value in values]
     return {league: math.exp(value) for league, value in zip(leagues, values, strict=True)}
+
+
+CORNER_LINES = (8.5, 9.5, 10.5)
+YELLOW_LINES = (3.5, 4.5, 5.5)
+
+
+def _logit(value: float) -> float:
+    value = min(max(value, 1e-6), 1 - 1e-6)
+    return math.log(value / (1 - value))
+
+
+def _sigmoid(value: float) -> float:
+    if value >= 0:
+        return 1.0 / (1.0 + math.exp(-value))
+    exponent = math.exp(value)
+    return exponent / (1.0 + exponent)
+
+
+def _fit_market_model(
+    model: CrossRates,
+    rows: list[MatchRow],
+    *,
+    kind: str,
+    lines: tuple[float, ...],
+) -> dict[float, tuple[float, float, float, float]]:
+    """Подобрать поправку P = sigmoid(b + a*logit(p0) + c*|diff| + e*total).
+
+    Углы и карточки зависят не только от средних команд, но и от того,
+    насколько матч «открытый»: при перевесе одной стороны игра идёт в одну
+    сторону, и это меняет число углов.
+    """
+    result: dict[float, tuple[float, float, float, float]] = {}
+    if not rows:
+        return result
+
+    for line in lines:
+        samples: list[tuple[list[float], float]] = []
+        for match in rows:
+            if kind == "corners":
+                home_rate, away_rate = model.corners_lambda(match.home_team, match.away_team)
+                actual = (match.home_corners or 0) + (match.away_corners or 0)
+            else:
+                home_rate, away_rate = model.yellow_lambda(match.home_team, match.away_team)
+                actual = (match.home_yellow or 0) + (match.away_yellow or 0)
+            goals_home, goals_away = model.goals_lambda(match.home_team, match.away_team)
+            p0 = poisson_over(home_rate + away_rate, line)
+            samples.append(
+                (
+                    [1.0, _logit(p0), abs(goals_home - goals_away), goals_home + goals_away],
+                    1.0 if actual > line else 0.0,
+                )
+            )
+        if len(samples) < 80:
+            continue
+
+        def make_nll(values: list[tuple[list[float], float]]):  # noqa: ANN202
+            def negative_log_likelihood(params: list[float]) -> float:
+                total = 0.0
+                for features, outcome in values:
+                    q = _sigmoid(sum(w * f for w, f in zip(params, features, strict=True)))
+                    q = min(max(q, 1e-9), 1 - 1e-9)
+                    total -= outcome * math.log(q) + (1 - outcome) * math.log(1 - q)
+                return total
+
+            return negative_log_likelihood
+
+        fit = minimize(make_nll(samples), [0.0, 1.0, 0.0, 0.0], method="L-BFGS-B")
+        if fit.success:
+            result[line] = (float(fit.x[0]), float(fit.x[1]), float(fit.x[2]), float(fit.x[3]))
+    return result
+
+
+def apply_market_model(
+    table: dict[float, tuple[float, float, float, float]],
+    line: float,
+    p0: float,
+    goal_diff: float,
+    goal_total: float,
+) -> float:
+    """Применить поправку на темп. Без модели — вернуть исходную вероятность."""
+    params = table.get(line)
+    if not params:
+        return p0
+    b, a, c, e = params
+    return _sigmoid(b + a * _logit(p0) + c * goal_diff + e * goal_total)
 
 
 def _calibrate_cup_bases(

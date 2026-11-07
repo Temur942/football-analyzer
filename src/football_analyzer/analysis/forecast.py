@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from football_analyzer.analysis.bridge import apply_market_model
 from football_analyzer.analysis.poisson import (
     outcome_probs,
     poisson_over,
@@ -63,6 +64,20 @@ class Forecast:
     weather_note: str | None = None
 
 
+def _market_probability(
+    rates: Rates,
+    attr: str,
+    line: float,
+    mean: float,
+    goal_diff: float,
+    goal_total: float,
+) -> float:
+    """Вероятность «больше линии» с поправкой на темп матча, если она есть."""
+    base = poisson_over(mean, line)
+    table = getattr(rates, attr, None) or {}
+    return apply_market_model(table, line, base, goal_diff, goal_total)
+
+
 def build_forecast(
     rates: Rates,
     *,
@@ -109,10 +124,26 @@ def build_forecast(
         home_goals={line: team_over(matrix, "home", line) for line in TEAM_LINES},
         away_goals={line: team_over(matrix, "away", line) for line in TEAM_LINES},
         corners={
-            line: poisson_over(lam_corner_home + lam_corner_away, line) for line in CORNER_LINES
+            line: _market_probability(
+                rates,
+                "corner_model",
+                line,
+                lam_corner_home + lam_corner_away,
+                abs(lam_home - lam_away),
+                lam_home + lam_away,
+            )
+            for line in CORNER_LINES
         },
         yellow={
-            line: poisson_over(lam_yellow_home + lam_yellow_away, line) for line in YELLOW_LINES
+            line: _market_probability(
+                rates,
+                "yellow_model",
+                line,
+                lam_yellow_home + lam_yellow_away,
+                abs(lam_home - lam_away),
+                lam_home + lam_away,
+            )
+            for line in YELLOW_LINES
         },
         scores=top_scores(matrix, 3),
         weather_note=weather_note,
