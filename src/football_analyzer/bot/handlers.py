@@ -19,6 +19,8 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from football_analyzer.analysis.forecast import build_forecast, render_text
+from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models
 from football_analyzer.bot.access import BETA_TEXT
 from football_analyzer.config import get_settings
 from football_analyzer.storage import db
@@ -202,16 +204,61 @@ async def handle_back(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "today")
 async def handle_today(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
-    """Ближайший матч с уже посчитанным прогнозом.
+    """Посчитать прогнозы на ближайшие матчи и показать их прямо в чате."""
+    if callback.message is None:
+        await callback.answer()
+        return
+    if pool is None:
+        await callback.message.answer(
+            "База сейчас недоступна, поэтому прогнозы посчитать нельзя. "
+            "Попробуйте через пару минут.",
+            reply_markup=main_menu(),
+        )
+        await callback.answer("Нет доступа к базе")
+        return
 
-    Пул приходит от Dispatcher(pool=...) — aiogram подставляет его по имени
-    параметра. Если базы нет, бот всё равно отвечает.
-    """
-    text = "Пока нет рассчитанных прогнозов. Они появятся перед матчами."
-    if pool is not None:
-        row = await db.latest_prediction(pool)
-        if row is not None:
-            text = "📊 <b>Свежий прогноз</b>\n\n" + row
-    if callback.message:
-        await callback.message.answer(text, reply_markup=main_menu())
+    await callback.message.answer("⏳ Считаю прогнозы…")
     await callback.answer()
+
+    rows = await db.upcoming_matches(pool, 3)
+    if not rows:
+        await callback.message.answer(
+            "На ближайшие дни матчей нет. Загляните позже.", reply_markup=main_menu()
+        )
+        return
+
+    model = await fit_all_models(pool)
+    sent = 0
+    for row in rows:
+        competition_id = row["competition_id"]
+        rates: object | None
+        if competition_id.startswith(CUP_PREFIXES):
+            rates = model
+        else:
+            rates = model.league_rates.get(competition_id)
+        if rates is None:
+            continue
+        if (
+            model.team_league.get(row["home_team"]) is None
+            or model.team_league.get(row["away_team"]) is None
+        ):
+            continue
+        forecast = build_forecast(
+            rates,  # type: ignore[arg-type]
+            competition_id=competition_id,
+            home_team=row["home_team"],
+            away_team=row["away_team"],
+            kickoff_utc=row["kickoff_utc"],
+        )
+        await callback.message.answer(
+            render_text(forecast, row["name_ru"]), reply_markup=main_menu()
+        )
+        sent += 1
+        if sent >= 3:
+            break
+
+    if sent == 0:
+        await callback.message.answer(
+            "По ближайшим матчам пока не хватает истории для расчёта.",
+            reply_markup=main_menu(),
+        )

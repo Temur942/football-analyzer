@@ -19,6 +19,7 @@ from football_analyzer import __version__
 from football_analyzer.bot import handlers
 from football_analyzer.bot.access import AccessMiddleware
 from football_analyzer.config import get_settings
+from football_analyzer.scheduler.delivery import deliver_due
 from football_analyzer.storage import db
 
 log = logging.getLogger(__name__)
@@ -65,8 +66,34 @@ async def main() -> None:
     log.info("закрытая бета: %s, админов: %d", settings.closed_beta, len(settings.admin_ids))
 
     scheduler = AsyncIOScheduler(timezone="UTC")
-    # TODO(AGENTS.md §10): добавить задание «проверить расписание и отправить
-    # прогнозы за forecast_lead_hours до матча» после выбора базы и источника.
+
+    async def deliver_to_chat(chat_id: int, text: str) -> None:
+        await bot.send_message(chat_id, text)
+
+    async def send_due_forecasts() -> None:
+        """Разослать прогнозы админам за N часов до матча.
+
+        Пока продаж нет, получатели — только админы. Права и идемпотентность
+        обеспечивает журнал deliveries: второй раз тот же матч не уйдёт.
+        """
+        if pool is None or not settings.admin_ids:
+            return
+        try:
+            report = await deliver_due(
+                pool,
+                lead_hours=settings.forecast_lead_hours,
+                dry_run=False,
+                send=deliver_to_chat,
+                recipients=settings.admin_ids,
+            )
+            if report.sent:
+                log.info("прогнозов отправлено: %d", report.sent)
+            if report.failed:
+                log.warning("не отправлено: %d", report.failed)
+        except Exception as exc:  # noqa: BLE001
+            log.error("рассылка не удалась: %s", exc)
+
+    scheduler.add_job(send_due_forecasts, "interval", minutes=10, id="deliver")
     scheduler.start()
 
     try:

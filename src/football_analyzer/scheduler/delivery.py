@@ -72,6 +72,7 @@ async def deliver_due(
     dry_run: bool = True,
     send: SendFunc | None = None,
     max_matches: int = 200,
+    recipients: list[int] | None = None,
 ) -> DeliveryReport:
     """Найти матчи в окне «за lead_hours» и разослать прогнозы.
 
@@ -85,8 +86,12 @@ async def deliver_due(
     rows = rows[:max_matches]
     report.due = len(rows)
 
-    subscribers = await db.active_subscribers(pool)
-    chats = [int(row["chat_id"]) for row in subscribers]
+    if recipients:
+        # Явный список получателей (например, админы до запуска продаж).
+        chats = [int(chat_id) for chat_id in recipients]
+    else:
+        subscribers = await db.active_subscribers(pool)
+        chats = [int(row["chat_id"]) for row in subscribers]
     if not chats:
         # Подписчиков пока нет: пишем прогон в журнал на служебный адрес,
         # чтобы конвейер был проверяемым до запуска продаж.
