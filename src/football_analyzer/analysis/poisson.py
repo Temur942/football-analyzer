@@ -9,11 +9,28 @@ from __future__ import annotations
 
 import math
 
+from scipy.stats import nbinom
+
 from football_analyzer.analysis.ratings import tau
 
 
 def poisson_pmf(k: int, lam: float) -> float:
     return math.exp(-lam) * lam**k / math.factorial(k)
+
+
+def nbinom_over(mean: float, line: float, dispersion: float) -> float:
+    """P(X > line) для отрицательного биномиального распределения.
+
+    Углы и карточки разбросаны сильнее Пуассона (у углов дисперсия в 1,32 раза
+    выше среднего), поэтому Пуассон слишком уверен рядом со средним.
+    dispersion — параметр k: чем больше, тем ближе к Пуассону.
+    """
+    if mean <= 0:
+        return 0.0
+    if dispersion <= 0:
+        return poisson_over(mean, line)
+    probability = dispersion / (dispersion + mean)
+    return float(nbinom.sf(math.floor(line), dispersion, probability))
 
 
 def poisson_over(lam: float, line: float) -> float:

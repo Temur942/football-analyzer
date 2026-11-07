@@ -48,6 +48,10 @@ class CrossRates:
     cup_yellow_home: float = 2.2
     cup_yellow_away: float = 2.4
 
+    # Параметр k отрицательного биномиального: None — считать по Пуассону.
+    corner_dispersion: float | None = None
+    yellow_dispersion: float | None = None
+
     def _league(self, team: str) -> str | None:
         return self.team_league.get(team)
 
@@ -222,6 +226,20 @@ def fit_league_strength(
     return {league: math.exp(value) for league, value in zip(leagues, values, strict=True)}
 
 
+def _estimate_dispersion(totals: list[float]) -> float | None:
+    """Оценить k по методу моментов: k = mean^2 / (var - mean)."""
+    if len(totals) < 30:
+        return None
+    mean = sum(totals) / len(totals)
+    if mean <= 0:
+        return None
+    variance = sum((value - mean) ** 2 for value in totals) / (len(totals) - 1)
+    excess = variance - mean
+    if excess <= 0.01:
+        return None
+    return mean * mean / excess
+
+
 def _calibrate_cup_bases(
     model: CrossRates,
     cross_matches: list[MatchRow],
@@ -290,6 +308,12 @@ def _calibrate_cup_bases(
     ]
     model.cup_yellow_home, model.cup_yellow_away = tune(
         cards, "attack_yellow", "defence_yellow", model.cup_yellow_home, model.cup_yellow_away
+    )
+    model.corner_dispersion = _estimate_dispersion(
+        [float((match.home_corners or 0) + (match.away_corners or 0)) for match, _, _ in corners]
+    )
+    model.yellow_dispersion = _estimate_dispersion(
+        [float((match.home_yellow or 0) + (match.away_yellow or 0)) for match, _, _ in cards]
     )
 
 
