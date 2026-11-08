@@ -952,3 +952,18 @@ async def prediction_payload(pool: asyncpg.Pool, match_id: int) -> str | None:
             " ORDER BY created_at DESC LIMIT 1",
             match_id,
         )
+
+
+async def match_for_forecast(pool: asyncpg.Pool, match_id: int) -> asyncpg.Record | None:
+    """Матч по id — для deep-link «открыть этот прогноз»."""
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
+            """
+            SELECT m.id, m.home_team, m.away_team, m.kickoff_utc, m.competition_id,
+                   c.name_ru
+              FROM matches m
+              JOIN competitions c ON c.id = m.competition_id
+             WHERE m.id = $1
+            """,
+            match_id,
+        )

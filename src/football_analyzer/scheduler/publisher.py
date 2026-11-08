@@ -66,7 +66,7 @@ def post_text(forecast: Forecast, competition_name: str) -> str:
     )
 
 
-async def build_forecast_post(pool: asyncpg.Pool) -> str | None:
+async def build_forecast_post(pool: asyncpg.Pool) -> tuple[str, int] | None:
     """Пост-прогноз по ближайшему матчу популярной лиги."""
     upcoming = await db.upcoming_matches(pool, 2)
     if not upcoming:
@@ -102,7 +102,7 @@ async def build_forecast_post(pool: asyncpg.Pool) -> str | None:
             away_team=row["away_team"],
             kickoff_utc=row["kickoff_utc"],
         )
-        return post_text(forecast, row["name_ru"])
+        return post_text(forecast, row["name_ru"]), int(row["id"])
     return None
 
 
@@ -150,11 +150,13 @@ async def publish_next(bot: object, pool: asyncpg.Pool, channel_id: str) -> bool
         return False
 
     text = row["body"]
+    match_id: int | None = None
     if row["kind"] == "forecast" or not text:
-        text = await build_forecast_post(pool)
-        if text is None:
+        built = await build_forecast_post(pool)
+        if built is None:
             log.warning("пост-прогноз не собран: нет матчей")
             return False
+        text, match_id = built
 
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[

@@ -199,6 +199,16 @@ def _source_from(payload: str | None) -> str | None:
     return payload.removeprefix("ch_")[:32]
 
 
+def _match_from(payload: str | None) -> int | None:
+    """id матча из deep-link ?start=match_<id>."""
+    if not payload or not payload.startswith("match_"):
+        return None
+    try:
+        return int(payload.removeprefix("match_"))
+    except ValueError:
+        return None
+
+
 def _referrer_from(payload: str | None) -> int | None:
     """Достать id пригласившего из ?start=ref_<id>."""
     if not payload or not payload.startswith("ref_"):
@@ -247,6 +257,10 @@ async def handle_start(
         user_id = message.from_user.id if message.from_user else 0
         await message.answer(BETA_TEXT % user_id)
         return
+    match_id = _match_from(command.args if command else None)
+    if match_id is not None and pool is not None:
+        if await send_match_forecast(message, pool, match_id):
+            return
     await message.answer(start_text(), reply_markup=main_menu())
 
 
@@ -499,6 +513,34 @@ async def handle_document(callback: CallbackQuery) -> None:
     _DOC_MESSAGES[chat_id] = ids
     await callback.message.answer("Это весь документ. Что дальше?", reply_markup=doc_nav())
     await callback.answer()
+
+
+async def send_match_forecast(message: Message, pool: asyncpg.Pool, match_id: int) -> bool:
+    """Показать прогноз конкретного матча (deep-link). False — если не нашли."""
+    row = await db.match_for_forecast(pool, match_id)
+    if row is None:
+        return False
+    payload = await db.prediction_payload(pool, match_id)
+    if payload:
+        await message.answer(render_payload(json.loads(payload), row["name_ru"]))
+        return True
+    model = await fit_all_models(pool)
+    rates = (
+        model
+        if row["competition_id"].startswith(CUP_PREFIXES)
+        else model.league_rates.get(row["competition_id"])
+    )
+    if rates is None:
+        return False
+    forecast = build_forecast(
+        rates,  # type: ignore[arg-type]
+        competition_id=row["competition_id"],
+        home_team=row["home_team"],
+        away_team=row["away_team"],
+        kickoff_utc=row["kickoff_utc"],
+    )
+    await message.answer(render_text(forecast, row["name_ru"]))
+    return True
 
 
 @router.message(Command("faq"))

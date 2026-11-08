@@ -3,6 +3,7 @@
 from football_analyzer.bot.handlers import (
     TARIFFS,
     TRIAL_DAYS,
+    _match_from,
     _referrer_from,
     _source_from,
     order_text,
@@ -59,3 +60,10 @@ def test_subscription_text_without_subscription() -> None:
 
 def test_trial_is_three_days() -> None:
     assert TRIAL_DAYS == 3
+
+
+def test_match_deeplink_parsing() -> None:
+    assert _match_from("match_12345") == 12345
+    assert _match_from("ref_42") is None
+    assert _match_from("match_abc") is None
+    assert _match_from(None) is None
