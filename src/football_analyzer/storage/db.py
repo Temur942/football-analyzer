@@ -459,6 +459,8 @@ async def active_subscribers(pool: asyncpg.Pool) -> list[asyncpg.Record]:
              WHERE is_active
                AND paid_until IS NOT NULL
                AND paid_until > now()
+               -- Без согласия слать нельзя: это обработка персональных данных.
+               AND consent_at IS NOT NULL
              ORDER BY chat_id
             """
         )

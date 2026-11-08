@@ -83,6 +83,9 @@ async def main() -> None:
     CHANNEL_ALERT_THRESHOLD = 3
 
     async def deliver_to_chat(chat_id: int, text: str) -> None:
+        # Небольшая пауза: при сотнях подписчиков Telegram начинает отклонять
+        # частые запросы, а мы не хотим терять прогнозы из-за темпа.
+        await asyncio.sleep(0.05)
         await bot.send_message(chat_id, text)
 
     async def notify_channel_failure(kind: str, exc: Exception) -> None:
@@ -114,15 +117,29 @@ async def main() -> None:
         Пока продаж нет, получатели — только админы. Права и идемпотентность
         обеспечивает журнал deliveries: второй раз тот же матч не уйдёт.
         """
-        if pool is None or not settings.admin_ids:
+        if pool is None:
             return
         try:
+            # Получатели: админы + все с действующей подпиской или пробным
+            # доступом. Список берём из базы каждый раз — новый подписчик
+            # начинает получать прогнозы со следующего прохода.
+            recipients = set(settings.admin_ids)
+            try:
+                for row in await db.active_subscribers(pool):
+                    recipients.add(int(row["chat_id"]))
+            except Exception as exc:  # noqa: BLE001
+                log.error("не удалось получить подписчиков: %s", exc)
+            log.info(
+                "получателей прогнозов: %d (админов %d)",
+                len(recipients),
+                len(settings.admin_ids),
+            )
             report = await deliver_due(
                 pool,
                 lead_hours=settings.forecast_lead_hours,
                 dry_run=False,
                 send=deliver_to_chat,
-                recipients=settings.admin_ids,
+                recipients=sorted(recipients),
             )
             if report.sent:
                 log.info("прогнозов отправлено: %d", report.sent)
