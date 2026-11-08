@@ -326,7 +326,12 @@ async def _sync_stats(dsn: str, limit: int, pause: float) -> tuple[int, int, dic
                             await db.save_referee(pool, row["id"], parse_officials(data))
                         except Exception as exc:  # noqa: BLE001
                             log.warning("арбитр не записан: %s", exc)
-                        if stats is None or not stats.has_corners_and_cards:
+                        if stats is not None and stats.is_empty:
+                            # Источник отдал нули вместо статистики — повтор
+                            # вернёт то же самое, поэтому помечаем как недоступное.
+                            await db.mark_stats_unavailable(pool, row["id"], "источник отдал нули")
+                            failed += 1
+                        elif stats is None or not stats.has_corners_and_cards:
                             if has_any_statistics(data):
                                 # Данные есть, но неполные — попробуем позже.
                                 await db.mark_stats_error(

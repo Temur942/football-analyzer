@@ -43,6 +43,21 @@ class MatchStats:
         return self.home_goals is not None and self.away_goals is not None
 
     @property
+    def is_empty(self) -> bool:
+        """Все четыре значения нулевые — это отсутствие данных, а не матч без углов.
+
+        У двух команд одновременно не бывает ноль углов и ноль карточек;
+        источник просто отдаёт заполненные нулями поля, когда статистики нет.
+        """
+        values = (
+            self.home_corners,
+            self.away_corners,
+            self.home_yellow,
+            self.away_yellow,
+        )
+        return all(value == 0 for value in values)
+
+    @property
     def has_corners_and_cards(self) -> bool:
         return None not in (
             self.home_corners,
