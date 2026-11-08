@@ -1030,6 +1030,13 @@ async def _accuracy(dsn: str, days: int) -> dict:
 
     stats: dict[str, dict[str, int]] = {}
     confident: dict[str, dict[str, int]] = {}
+    # Brier по лигам: сумма квадратов ошибок и число наблюдений.
+    brier: dict[str, dict[str, list[float]]] = {}
+
+    def add_brier(league: str, name: str, probability: float, outcome: float) -> None:
+        bucket = brier.setdefault(league, {}).setdefault(name, [0.0, 0.0])
+        bucket[0] += (probability - outcome) ** 2
+        bucket[1] += 1.0
 
     def add(bucket: dict, name: str, probability: float, hit: bool) -> None:
         row = bucket.setdefault(name, {"n": 0, "hits": 0})
@@ -1065,6 +1072,7 @@ async def _accuracy(dsn: str, days: int) -> dict:
         probability = outcomes[pick]
         hit = pick == actual_outcome
         add(stats, "исход", probability, hit)
+        add_brier(cid, "исход", probability, 1.0 if hit else 0.0)
         if probability >= 0.6:
             add(confident, "исход", probability, hit)
 
@@ -1072,6 +1080,7 @@ async def _accuracy(dsn: str, days: int) -> dict:
         probability = forecast.total[2.5]
         hit = (total_goals > 2.5) == (probability > 0.5)
         add(stats, "тотал 2,5", probability, hit)
+        add_brier(cid, "тотал 2,5", probability, 1.0 if hit else 0.0)
         if probability >= 0.6 or probability <= 0.4:
             add(confident, "тотал 2,5", probability, hit)
 
@@ -1080,6 +1089,7 @@ async def _accuracy(dsn: str, days: int) -> dict:
             probability = forecast.corners[9.5]
             hit = (corners > 9.5) == (probability > 0.5)
             add(stats, "углы 9,5", probability, hit)
+            add_brier(cid, "углы 9,5", probability, 1.0 if hit else 0.0)
             if probability >= 0.6 or probability <= 0.4:
                 add(confident, "углы 9,5", probability, hit)
 
@@ -1088,6 +1098,7 @@ async def _accuracy(dsn: str, days: int) -> dict:
             probability = forecast.yellow[4.5]
             hit = (cards > 4.5) == (probability > 0.5)
             add(stats, "ЖК 4,5", probability, hit)
+            add_brier(cid, "ЖК 4,5", probability, 1.0 if hit else 0.0)
             if probability >= 0.6 or probability <= 0.4:
                 add(confident, "ЖК 4,5", probability, hit)
 
@@ -1106,6 +1117,16 @@ async def _accuracy(dsn: str, days: int) -> dict:
         "window_days": days,
         "markets": summarize(stats),
         "confident": summarize(confident),
+        "by_league": {
+            league: {
+                name: {
+                    "n": int(values[1]),
+                    "brier": round(values[0] / values[1], 4) if values[1] else 0.0,
+                }
+                for name, values in sorted(markets.items())
+            }
+            for league, markets in sorted(brier.items())
+        },
     }
 
 
@@ -1127,6 +1148,17 @@ def cmd_accuracy(args: argparse.Namespace) -> int:
     for name, value in report["confident"].items():
         print("  %-12s %8d %8d %9.1f%%" % (name, value["n"], value["hits"], value["rate"] * 100))
     print("=" * 70)
+
+    if args.by_league:
+        print("  ПО ЛИГАМ (Brier по рынкам, меньше — лучше)")
+        print("  %-26s %8s %8s %8s" % ("лига", "исход", "углы 9,5", "ЖК 4,5"))
+        for league, markets in report["by_league"].items():
+            parts = []
+            for name in ("исход", "углы 9,5", "ЖК 4,5"):
+                value = markets.get(name)
+                parts.append("%.4f" % value["brier"] if value and value["n"] >= 30 else "   —   ")
+            print("  %-26s %8s %8s %8s" % (league, parts[0], parts[1], parts[2]))
+        print("=" * 70)
 
     if args.json:
         path = Path(args.json)
@@ -1338,6 +1370,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_acc = sub.add_parser("accuracy", help="точность модели за последние N дней")
     p_acc.add_argument("--days", type=int, default=30)
     p_acc.add_argument("--json", default="docs/landing/accuracy.json")
+    p_acc.add_argument("--by-league", action="store_true", help="разбивка по соревнованиям")
     p_acc.set_defaults(func=cmd_accuracy)
 
     p_health = sub.add_parser("health", help="проверить пульс, отправки и очередь")
