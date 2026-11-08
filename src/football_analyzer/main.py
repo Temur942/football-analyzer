@@ -186,7 +186,18 @@ async def main() -> None:
             if db_failures >= 3:
                 # База недоступна три цикла подряд. Тихо жить без неё нельзя:
                 # выходим, чтобы супервизор поднял процесс и туннель заново.
+                # Перед выходом успеваем предупредить админа: сам health-watch
+                # этого не сделает, ему тоже нужна база.
                 log.critical("база недоступна 30 минут — перезапускаюсь")
+                for admin_id in settings.admin_ids:
+                    try:
+                        await bot.send_message(
+                            admin_id,
+                            "ALERT база недоступна больше 30 минут: прогнозы "
+                            "не отправляются. Перезапускаюсь автоматически.",
+                        )
+                    except Exception:  # noqa: BLE001
+                        continue
                 os._exit(1)
 
     scheduler.add_job(heartbeat_tick, "interval", minutes=10, id="heartbeat")
