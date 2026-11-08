@@ -864,7 +864,7 @@ async def matches_without_referee(pool: asyncpg.Pool, limit: int) -> list[asyncp
     async with pool.acquire() as conn:
         return await conn.fetch(
             """
-            SELECT m.id, m.source_game_id, c.espn_slug
+            SELECT m.id, m.source_game_id, c.source_key AS espn_slug
               FROM matches m
               JOIN competitions c ON c.id = m.competition_id
              WHERE m.status = 'finished'
