@@ -48,11 +48,28 @@ if [ "${1:-}" = "--check" ]; then
 fi
 
 # --- данные с сервера (в вывод не попадают) ---------------------------------
-DB_URL=$(ssh -i "$KEY" -o BatchMode=yes "$SERVER" 'grep "^DATABASE_URL=" /etc/football-analyzer/stage.env | cut -d= -f2-')
-BOT_TOKEN=$(ssh -i "$KEY" -o BatchMode=yes "$SERVER" 'grep "^BOT_TOKEN=" /etc/football-analyzer/stage.env | cut -d= -f2-')
-BOT_ADMIN_IDS=$(ssh -i "$KEY" -o BatchMode=yes "$SERVER" 'grep "^BOT_ADMIN_IDS=" /etc/football-analyzer/stage.env | cut -d= -f2-')
-CLOSED_BETA=$(ssh -i "$KEY" -o BatchMode=yes "$SERVER" 'grep "^CLOSED_BETA=" /etc/football-analyzer/stage.env | cut -d= -f2-')
-CHANNEL_ID=$(ssh -i "$KEY" -o BatchMode=yes "$SERVER" 'grep "^CHANNEL_ID=" /etc/football-analyzer/stage.env | cut -d= -f2-')
+# Одно соединение вместо пяти: пять подряд падают целиком, если SSH моргнёт
+# (проверено 08.11.2026 — временный сброс соединения останавливал запуск).
+env_dump=""
+for attempt in 1 2 3 4 5; do
+  env_dump=$(ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=15 "$SERVER" \
+    'grep -E "^(DATABASE_URL|BOT_TOKEN|BOT_ADMIN_IDS|CLOSED_BETA|CHANNEL_ID)=" /etc/football-analyzer/stage.env' 2>/dev/null) || true
+  if [ -n "$env_dump" ]; then
+    break
+  fi
+  echo "SSH не ответил, повтор через 5 секунд (попытка $attempt из 5)" >&2
+  sleep 5
+done
+
+read_value() {
+  printf '%s\n' "$env_dump" | grep -m1 "^$1=" | cut -d= -f2-
+}
+
+DB_URL=$(read_value DATABASE_URL)
+BOT_TOKEN=$(read_value BOT_TOKEN)
+BOT_ADMIN_IDS=$(read_value BOT_ADMIN_IDS)
+CLOSED_BETA=$(read_value CLOSED_BETA)
+CHANNEL_ID=$(read_value CHANNEL_ID)
 
 if [ -z "$BOT_TOKEN" ]; then
   echo "ОШИБКА: BOT_TOKEN пуст в env-файле сервера" >&2
