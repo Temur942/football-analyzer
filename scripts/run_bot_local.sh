@@ -87,4 +87,19 @@ export APP_ENV=local
 export DELIVERY_DRY_RUN=true
 
 cd "$ROOT"
-exec .venv/bin/python -m football_analyzer.main
+
+# Супервизор: если бот вышел (например, потеряв базу на 30 минут), поднимаем
+# его снова и заодно пересоздаём туннель — иначе процесс живёт без данных
+# и молча не отправляет прогнозы.
+while true; do
+  .venv/bin/python -m football_analyzer.main
+  code=$?
+  echo "бот завершился (код $code), перезапуск через 10 секунд" >&2
+  pkill -f "${LOCAL_PORT}:127.0.0.1:5432" 2>/dev/null || true
+  sleep 10
+  ssh -i "$KEY" -N \
+      -o ExitOnForwardFailure=yes \
+      -o ServerAliveInterval=15 \
+      -o ServerAliveCountMax=3 \
+      -L "${LOCAL_PORT}:127.0.0.1:5432" "$SERVER" &
+done

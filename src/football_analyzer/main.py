@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 
 from aiogram import Bot, Dispatcher
@@ -170,13 +171,23 @@ async def main() -> None:
 
     scheduler.add_job(send_due_forecasts, "interval", minutes=10, id="deliver")
 
+    db_failures = 0
+
     async def heartbeat_tick() -> None:
+        nonlocal db_failures
         if pool is None:
             return
         try:
             await db.beat(pool)
+            db_failures = 0
         except Exception as exc:  # noqa: BLE001
-            log.error("не удалось записать пульс: %s", exc)
+            db_failures += 1
+            log.error("не удалось записать пульс (%d раз подряд): %s", db_failures, exc)
+            if db_failures >= 3:
+                # База недоступна три цикла подряд. Тихо жить без неё нельзя:
+                # выходим, чтобы супервизор поднял процесс и туннель заново.
+                log.critical("база недоступна 30 минут — перезапускаюсь")
+                os._exit(1)
 
     scheduler.add_job(heartbeat_tick, "interval", minutes=10, id="heartbeat")
 
