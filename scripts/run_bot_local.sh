@@ -92,10 +92,12 @@ start_tunnel() {
 
 trap 'kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
 
+# set -e сверху: без `|| true` падение бота убило бы сам супервизор,
+# а падать он должен ровно для того, чтобы поднять бота заново.
 while true; do
-  start_tunnel
-  .venv/bin/python -m football_analyzer.main
-  code=$?
+  start_tunnel || true
+  code=0
+  .venv/bin/python -m football_analyzer.main || code=$?
   echo "бот завершился (код $code), перезапуск через 10 секунд" >&2
   kill "$TUNNEL_PID" 2>/dev/null || true
   sleep 10
