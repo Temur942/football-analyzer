@@ -21,6 +21,7 @@ from football_analyzer.bot import handlers
 from football_analyzer.bot.access import AccessMiddleware
 from football_analyzer.config import get_settings
 from football_analyzer.scheduler.delivery import deliver_due
+from football_analyzer.scheduler.digest import send_digest
 from football_analyzer.scheduler.publisher import accuracy_post, publish_next
 from football_analyzer.storage import db
 
@@ -243,6 +244,25 @@ async def main() -> None:
             log.info("опубликован пост точности")
         except Exception as exc:  # noqa: BLE001
             log.error("пост точности не удался: %s", exc)
+
+    async def weekly_digest() -> None:
+        """Раз в неделю — сводка подписчикам: что будет и напоминание о боте."""
+        if pool is None:
+            return
+        try:
+            await send_digest(bot, pool)
+        except Exception as exc:  # noqa: BLE001
+            log.error("дайджест не отправлен: %s", exc)
+
+    scheduler.add_job(
+        weekly_digest,
+        "cron",
+        day_of_week="mon",
+        hour=10,
+        minute=0,
+        timezone="Europe/Moscow",
+        id="weekly_digest",
+    )
 
     scheduler.add_job(
         publish_accuracy,

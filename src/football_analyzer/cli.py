@@ -1287,6 +1287,35 @@ def cmd_sync_referees(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _digest_preview(dsn: str) -> str | None:
+    from football_analyzer.scheduler.digest import build_digest
+
+    pool = await db.connect(dsn)
+    try:
+        await db.apply_schema(pool)
+        return await build_digest(pool)
+    finally:
+        await pool.close()
+
+
+def cmd_digest(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        text = asyncio.run(_digest_preview(settings.require_database_url()))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    if text is None:
+        print("Матчей на неделе нет — сводка не будет отправлена.")
+        return EXIT_OK
+    print("=" * 60)
+    print("  ЕЖЕНЕДЕЛЬНАЯ СВОДКА (предпросмотр)")
+    print("=" * 60)
+    print(text)
+    print("=" * 60)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -1406,6 +1435,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_ref.add_argument("--limit", type=int, default=200)
     p_ref.add_argument("--pause", type=float, default=0.1)
     p_ref.set_defaults(func=cmd_sync_referees)
+
+    p_digest = sub.add_parser("digest", help="предпросмотр недельной сводки")
+    p_digest.set_defaults(func=cmd_digest)
 
     return parser
 
