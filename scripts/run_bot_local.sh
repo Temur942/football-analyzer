@@ -109,13 +109,27 @@ start_tunnel() {
 
 trap 'kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
 
+start_tunnel || true
+
+# Сторож туннеля: SSH-соединение к базе умирает тихо, и бот узнаёт об этом
+# только когда перестаёт писать пульс. Проверяем порт каждые 20 секунд.
+watch_tunnel() {
+  while true; do
+    sleep 20
+    if ! (echo > "/dev/tcp/127.0.0.1/${LOCAL_PORT}") >/dev/null 2>&1; then
+      echo "туннель к базе умер — поднимаю заново" >&2
+      kill "$TUNNEL_PID" 2>/dev/null || true
+      start_tunnel || true
+    fi
+  done
+}
+watch_tunnel &
+
 # set -e сверху: без `|| true` падение бота убило бы сам супервизор,
 # а падать он должен ровно для того, чтобы поднять бота заново.
 while true; do
-  start_tunnel || true
   code=0
   .venv/bin/python -m football_analyzer.main || code=$?
   echo "бот завершился (код $code), перезапуск через 10 секунд" >&2
-  kill "$TUNNEL_PID" 2>/dev/null || true
   sleep 10
 done
