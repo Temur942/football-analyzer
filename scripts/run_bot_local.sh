@@ -59,25 +59,9 @@ if [ -z "$BOT_TOKEN" ]; then
   exit 1
 fi
 
-# Пробрасываем порт базы на локальную машину.
-ssh -i "$KEY" -N \
-    -o ExitOnForwardFailure=yes \
-    -o ServerAliveInterval=15 \
-    -o ServerAliveCountMax=3 \
-    -L "${LOCAL_PORT}:127.0.0.1:5432" "$SERVER" &
-TUNNEL_PID=$!
-trap 'kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
-
-# Ждём, пока туннель реально начнёт принимать соединения: 2 секунды сна
-# оказалось мало — бот падал на подключении к базе.
-for attempt in $(seq 1 20); do
-  if (echo > "/dev/tcp/127.0.0.1/${LOCAL_PORT}") >/dev/null 2>&1; then
-    echo "туннель к базе готов (порт ${LOCAL_PORT})"
-    break
-  fi
-  sleep 1
-done
-
+# Пробрасываем порт базы на локальную машину и запускаем бота под присмотром.
+# pkill по шаблону здесь опасен: он может совпасть с командной строкой того,
+# кто запустил скрипт, и убить супервизор. Поэтому туннель живёт под своим PID.
 export DATABASE_URL="${DB_URL/@127.0.0.1:5432/@127.0.0.1:${LOCAL_PORT}}"
 export BOT_TOKEN
 export BOT_ADMIN_IDS="${BOT_ADMIN_IDS:-}"
@@ -88,18 +72,31 @@ export DELIVERY_DRY_RUN=true
 
 cd "$ROOT"
 
-# Супервизор: если бот вышел (например, потеряв базу на 30 минут), поднимаем
-# его снова и заодно пересоздаём туннель — иначе процесс живёт без данных
-# и молча не отправляет прогнозы.
-while true; do
-  .venv/bin/python -m football_analyzer.main
-  code=$?
-  echo "бот завершился (код $code), перезапуск через 10 секунд" >&2
-  pkill -f "${LOCAL_PORT}:127.0.0.1:5432" 2>/dev/null || true
-  sleep 10
+start_tunnel() {
   ssh -i "$KEY" -N \
       -o ExitOnForwardFailure=yes \
       -o ServerAliveInterval=15 \
       -o ServerAliveCountMax=3 \
       -L "${LOCAL_PORT}:127.0.0.1:5432" "$SERVER" &
+  TUNNEL_PID=$!
+  for _ in $(seq 1 20); do
+    if (echo > "/dev/tcp/127.0.0.1/${LOCAL_PORT}") >/dev/null 2>&1; then
+      echo "туннель к базе готов (порт ${LOCAL_PORT})"
+      return 0
+    fi
+    sleep 1
+  done
+  echo "ВНИМАНИЕ: туннель не поднялся за 20 секунд" >&2
+  return 1
+}
+
+trap 'kill "$TUNNEL_PID" 2>/dev/null || true' EXIT
+
+while true; do
+  start_tunnel
+  .venv/bin/python -m football_analyzer.main
+  code=$?
+  echo "бот завершился (код $code), перезапуск через 10 секунд" >&2
+  kill "$TUNNEL_PID" 2>/dev/null || true
+  sleep 10
 done
