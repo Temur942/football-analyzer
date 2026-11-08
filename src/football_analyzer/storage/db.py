@@ -461,6 +461,8 @@ async def active_subscribers(pool: asyncpg.Pool) -> list[asyncpg.Record]:
                AND paid_until > now()
                -- Без согласия слать нельзя: это обработка персональных данных.
                AND consent_at IS NOT NULL
+               -- Человек мог выключить уведомления, оставив доступ.
+               AND notifications
              ORDER BY chat_id
             """
         )
@@ -901,3 +903,52 @@ async def referee_progress(pool: asyncpg.Pool) -> dict[str, int]:
             """
         )
     return {key: int(row[key] or 0) for key in row.keys()}
+
+
+async def set_notifications(pool: asyncpg.Pool, chat_id: int, enabled: bool) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE subscribers SET notifications = $2, updated_at = now() WHERE chat_id = $1",
+            chat_id,
+            enabled,
+        )
+
+
+async def notifications_state(pool: asyncpg.Pool, chat_id: int) -> bool:
+    """Включены ли уведомления. Для новых пользователей — да."""
+    async with pool.acquire() as conn:
+        value = await conn.fetchval(
+            "SELECT notifications FROM subscribers WHERE chat_id = $1", chat_id
+        )
+    return True if value is None else bool(value)
+
+
+async def user_predictions(
+    pool: asyncpg.Pool, chat_id: int, limit: int = 5
+) -> list[asyncpg.Record]:
+    """Последние прогнозы, которые человек уже получил."""
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            """
+            SELECT m.id, m.home_team, m.away_team, m.kickoff_utc,
+                   c.name_ru, p.payload
+              FROM deliveries d
+              JOIN matches m ON m.id = d.match_id
+              JOIN competitions c ON c.id = m.competition_id
+              LEFT JOIN predictions p ON p.match_id = m.id
+             WHERE d.chat_id = $1 AND d.status = 'sent'
+             ORDER BY m.kickoff_utc DESC
+             LIMIT $2
+            """,
+            chat_id,
+            limit,
+        )
+
+
+async def prediction_payload(pool: asyncpg.Pool, match_id: int) -> str | None:
+    async with pool.acquire() as conn:
+        return await conn.fetchval(
+            "SELECT payload::text FROM predictions WHERE match_id = $1"
+            " ORDER BY created_at DESC LIMIT 1",
+            match_id,
+        )

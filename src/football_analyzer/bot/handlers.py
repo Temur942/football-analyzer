@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import UTC, datetime
 
@@ -20,7 +21,7 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from football_analyzer.analysis.forecast import build_forecast, render_text
+from football_analyzer.analysis.forecast import build_forecast, render_payload, render_text
 from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models
 from football_analyzer.bot.access import BETA_TEXT, CONSENT_TEXT
 from football_analyzer.bot.docs import DOCUMENTS, delete_messages, send_document
@@ -46,6 +47,7 @@ def main_menu() -> InlineKeyboardMarkup:
     builder.button(text="📊 Прогноз на сегодня", callback_data="today")
     builder.button(text="💳 Тарифы и подписка", callback_data=CALLBACK_TARIFFS)
     builder.button(text="ℹ️ Как это работает", callback_data="about")
+    builder.button(text="📜 Мои прогнозы", callback_data="my_predictions")
     builder.button(text="⭐ Моя подписка", callback_data="my_subscription")
     builder.button(text="📄 Документы", callback_data="docs_menu")
     builder.adjust(1)
@@ -363,7 +365,94 @@ async def handle_my_subscription(callback: CallbackQuery, pool: asyncpg.Pool | N
             paid_until = await db.subscription_until(pool, callback.from_user.id)
         except Exception as exc:  # noqa: BLE001
             log.error("не удалось получить подписку: %s", exc)
-    await callback.message.answer(subscription_text(paid_until), reply_markup=tariffs_menu())
+    enabled = True
+    if pool is not None:
+        try:
+            enabled = await db.notifications_state(pool, callback.from_user.id)
+        except Exception as exc:  # noqa: BLE001
+            log.error("не удалось узнать состояние уведомлений: %s", exc)
+    builder = InlineKeyboardBuilder()
+    builder.button(
+        text=("🔕 Выключить рассылку" if enabled else "🔔 Включить рассылку"),
+        callback_data="toggle_notifications",
+    )
+    builder.button(text="💳 Тарифы", callback_data=CALLBACK_TARIFFS)
+    builder.button(text="⬅️ В меню", callback_data=CALLBACK_BACK)
+    builder.adjust(1)
+    await callback.message.answer(subscription_text(paid_until), reply_markup=builder.as_markup())
+    await callback.answer()
+
+
+@router.callback_query(F.data == "toggle_notifications")
+async def handle_toggle_notifications(
+    callback: CallbackQuery, pool: asyncpg.Pool | None = None
+) -> None:
+    """Выключить или включить автоматическую рассылку. Подписка не страдает."""
+    if pool is None:
+        await callback.answer("База недоступна", show_alert=True)
+        return
+    enabled = await db.notifications_state(pool, callback.from_user.id)
+    await db.set_notifications(pool, callback.from_user.id, not enabled)
+    await _event(
+        pool, callback.from_user.id, "notifications_on" if not enabled else "notifications_off"
+    )
+    await callback.answer("Рассылка включена" if not enabled else "Рассылка выключена")
+    if isinstance(callback.message, Message):
+        await callback.message.answer(
+            "🔔 Прогнозы снова будут приходить автоматически."
+            if not enabled
+            else "🔕 Автоматические прогнозы выключены. Доступ и подписка остались — "
+            "прогноз можно смотреть кнопкой «📊 Прогноз на сегодня».",
+            reply_markup=main_menu(),
+        )
+
+
+@router.callback_query(F.data == "my_predictions")
+async def handle_my_predictions(callback: CallbackQuery, pool: asyncpg.Pool | None = None) -> None:
+    if pool is None or not isinstance(callback.message, Message):
+        await callback.answer()
+        return
+    rows = await db.user_predictions(pool, callback.from_user.id, 5)
+    if not rows:
+        await callback.message.answer(
+            "📜 <b>Мои прогнозы</b>\n\nПока пусто: я ещё не отправлял вам прогнозы. "
+            "Они приходят за 5 часов до матча.",
+            reply_markup=main_menu(),
+        )
+        await callback.answer()
+        return
+    builder = InlineKeyboardBuilder()
+    for row in rows:
+        day = row["kickoff_utc"].strftime("%d.%m")
+        builder.button(
+            text="%s %s — %s" % (day, row["home_team"], row["away_team"]),
+            callback_data="pred:%d" % row["id"],
+        )
+    builder.button(text="⬅️ В меню", callback_data=CALLBACK_BACK)
+    builder.adjust(1)
+    await callback.message.answer(
+        "📜 <b>Мои прогнозы</b>\n\nПоследние отправленные. Выберите матч:",
+        reply_markup=builder.as_markup(),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("pred:"))
+async def handle_prediction_detail(
+    callback: CallbackQuery, pool: asyncpg.Pool | None = None
+) -> None:
+    """Показать сохранённый прогноз ровно в том виде, в каком он ушёл."""
+    if pool is None or not isinstance(callback.message, Message):
+        await callback.answer()
+        return
+    match_id = int((callback.data or "pred:0").split(":")[1])
+    payload = await db.prediction_payload(pool, match_id)
+    if not payload:
+        await callback.message.answer("Прогноз для этого матча не сохранился.")
+        await callback.answer()
+        return
+    data = json.loads(payload)
+    await callback.message.answer(render_payload(data))
     await callback.answer()
 
 

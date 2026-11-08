@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from football_analyzer.analysis.forecast import build_forecast, render_text
+from football_analyzer.analysis.forecast import build_forecast, render_payload, render_text
 from football_analyzer.analysis.ratings import Rates
 from football_analyzer.bot.docs import split_text
 
@@ -70,3 +70,29 @@ def test_split_text_respects_limit() -> None:
 
     # Пробелы и переводы строк при сборке частей меняются — сравниваем текст.
     assert re.sub(r"\s+", "", "".join(chunks)) == re.sub(r"\s+", "", text)
+
+
+def test_render_payload_keeps_total_lines_but_hides_weak_market_lines() -> None:
+    """Фильтр скрытых линий не должен задевать тотал: 3,5 голов — нормальная линия."""
+    payload = {
+        "competition_id": "uefa-champions-league",
+        "home_team": "А",
+        "away_team": "Б",
+        "kickoff_utc": "2026-11-08T14:00:00+00:00",
+        "p_home": 0.5,
+        "p_draw": 0.26,
+        "p_away": 0.24,
+        "total": {"1.5": 0.74, "2.5": 0.48, "3.5": 0.27},
+        "first_half": {"0.5": 0.67, "1.5": 0.31},
+        "corners": {"8.5": 0.55, "9.5": 0.48, "10.5": 0.35},
+        "yellow": {"3.5": 0.45, "4.5": 0.41, "5.5": 0.25},
+    }
+    text = render_payload(payload, "Лига чемпионов")
+    lines = [line for line in text.splitlines() if line.startswith("ТБ")]
+    totals, corners, cards = lines[0], lines[2], lines[3]
+
+    assert "3,5" in totals
+    assert "8,5" not in corners
+    assert "9,5" in corners
+    assert "3,5" not in cards
+    assert "4,5" in cards

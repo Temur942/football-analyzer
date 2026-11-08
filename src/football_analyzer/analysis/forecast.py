@@ -192,3 +192,53 @@ def render_text(forecast: Forecast, competition_name: str | None = None) -> str:
         blocks += ["", "🌦 <b>Погода:</b> " + forecast.weather_note]
     blocks += ["", "<i>Вероятности, а не гарантии. 18+</i>"]
     return "\n".join(blocks)
+
+
+def render_payload(payload: dict, competition_name: str | None = None) -> str:
+    """Собрать текст прогноза из сохранённого JSON (история «Мои прогнозы»).
+
+    Нужно, чтобы показать ранее отправленный прогноз без пересчёта модели:
+    цифры должны быть те же, что человек получил, даже если модель обновилась.
+    """
+    kickoff = datetime.fromisoformat(payload["kickoff_utc"]).astimezone(MSK)
+    competition_id = str(payload.get("competition_id", ""))
+    is_cup = competition_id.startswith(CUP_PREFIXES)
+
+    def pct(value: float) -> str:
+        return "%d%%" % round(float(value) * 100)
+
+    def line_text(values: dict, hidden: float | None = None) -> str:
+        """Строка линий. hidden — линия, скрытая для еврокубков."""
+        parts = []
+        for line, value in values.items():
+            number = float(line)
+            if is_cup and hidden is not None and number == hidden:
+                continue
+            parts.append("ТБ %s — <b>%s</b>" % (line.replace(".", ","), pct(value)))
+        return " · ".join(parts)
+
+    corners = dict(payload.get("corners", {}))
+    yellow = dict(payload.get("yellow", {}))
+
+    blocks = [
+        "⚽ <b>%s — %s</b>" % (payload["home_team"], payload["away_team"]),
+        "🏆 %s" % (competition_name or competition_id),
+        "🕐 %s МСК" % kickoff.strftime("%d.%m, %H:%M"),
+        "",
+        "🎯 <b>Исход</b>",
+        "▫️ Хозяева — <b>%s</b>" % pct(payload["p_home"]),
+        "▫️ Ничья — <b>%s</b>" % pct(payload["p_draw"]),
+        "▫️ Гости — <b>%s</b>" % pct(payload["p_away"]),
+        "",
+        "🥅 <b>Тотал матча</b>",
+        line_text(payload.get("total", {})),
+        "",
+        "⏱ <b>Тотал первого тайма</b>",
+        line_text(payload.get("first_half", {})),
+    ]
+    if corners:
+        blocks += ["", "🚩 <b>Угловые</b>", line_text(corners, HIDDEN_CUP_LINES["corners"])]
+    if yellow:
+        blocks += ["", "🟨 <b>Жёлтые карточки</b>", line_text(yellow, HIDDEN_CUP_LINES["yellow"])]
+    blocks += ["", "<i>Вероятности, а не гарантии. 18+</i>"]
+    return "\n".join(blocks)
