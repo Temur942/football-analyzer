@@ -857,3 +857,45 @@ async def ops_summary(pool: asyncpg.Pool) -> dict[str, object]:
             """
         )
     return {key: row[key] for key in row.keys()}
+
+
+async def matches_without_referee(pool: asyncpg.Pool, limit: int) -> list[asyncpg.Record]:
+    """Завершённые матчи, у которых арбитр ещё не запрашивался."""
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            """
+            SELECT m.id, m.source_game_id, c.espn_slug
+              FROM matches m
+              JOIN competitions c ON c.id = m.competition_id
+             WHERE m.status = 'finished'
+               AND m.referee_fetched_at IS NULL
+               AND m.source_game_id IS NOT NULL
+             ORDER BY m.kickoff_utc DESC
+             LIMIT $1
+            """,
+            limit,
+        )
+
+
+async def save_referee(pool: asyncpg.Pool, match_id: int, name: str | None) -> None:
+    """Записать арбитра (даже если его нет — отметка о запросе обязательна)."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE matches SET referee = $2, referee_fetched_at = now() WHERE id = $1",
+            match_id,
+            name,
+        )
+
+
+async def referee_progress(pool: asyncpg.Pool) -> dict[str, int]:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT count(*) FILTER (WHERE status = 'finished') AS finished,
+                   count(*) FILTER (WHERE referee IS NOT NULL) AS with_referee,
+                   count(*) FILTER (WHERE status = 'finished' AND referee_fetched_at IS NOT NULL)
+                       AS checked
+              FROM matches
+            """
+        )
+    return {key: int(row[key] or 0) for key in row.keys()}

@@ -143,3 +143,13 @@ def parse_venue(summary: dict) -> tuple[str | None, str | None]:
     city = address.get("city")
     country = address.get("country")
     return (str(city) if city else None, str(country) if country else None)
+
+
+def parse_officials(summary: dict) -> str | None:
+    """Имя главного арбитра из gameInfo.officials (order=1 — главный)."""
+    officials = (summary.get("gameInfo") or {}).get("officials") or []
+    for official in officials:
+        if int(official.get("order") or 99) == 1:
+            name = official.get("displayName") or official.get("fullName")
+            return str(name) if name else None
+    return None

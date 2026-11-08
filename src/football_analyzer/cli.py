@@ -33,6 +33,7 @@ from football_analyzer.datasources.espn_history import discover_season
 from football_analyzer.datasources.espn_stats import (
     fetch_summary,
     has_any_statistics,
+    parse_officials,
     parse_summary,
     parse_venue,
 )
@@ -320,6 +321,11 @@ async def _sync_stats(dsn: str, limit: int, pause: float) -> tuple[int, int, dic
                             session, row["espn_slug"], str(row["source_game_id"])
                         )
                         stats = parse_summary(data, str(row["source_game_id"]))
+                        # Арбитр приходит тем же ответом — второй запрос не нужен.
+                        try:
+                            await db.save_referee(pool, row["id"], parse_officials(data))
+                        except Exception as exc:  # noqa: BLE001
+                            log.warning("арбитр не записан: %s", exc)
                         if stats is None or not stats.has_corners_and_cards:
                             if has_any_statistics(data):
                                 # Данные есть, но неполные — попробуем позже.
@@ -1175,6 +1181,54 @@ def cmd_health(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _sync_referees(dsn: str, limit: int, pause: float) -> tuple[int, int, dict]:
+    pool = await db.connect(dsn)
+    done = failed = 0
+    try:
+        await db.apply_schema(pool)
+        pending = await db.matches_without_referee(pool, limit)
+        if pending:
+            async with aiohttp.ClientSession() as session:
+                for row in pending:
+                    try:
+                        data = await fetch_summary(
+                            session, row["espn_slug"], str(row["source_game_id"])
+                        )
+                        name = parse_officials(data)
+                        await db.save_referee(pool, row["id"], name)
+                        done += 1
+                    except Exception as exc:  # noqa: BLE001
+                        log.warning("арбитр не получен для матча %s: %s", row["id"], exc)
+                        failed += 1
+                    await asyncio.sleep(pause)
+        progress = await db.referee_progress(pool)
+    finally:
+        await pool.close()
+    return done, failed, progress
+
+
+def cmd_sync_referees(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        done, failed, progress = asyncio.run(
+            _sync_referees(settings.require_database_url(), args.limit, args.pause)
+        )
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    print("=" * 70)
+    print("  АРБИТРЫ МАТЧЕЙ")
+    print("=" * 70)
+    print("  Обработано сейчас:  %d" % done)
+    print("  Ошибок:             %d" % failed)
+    print("  Завершённых матчей: %d" % progress["finished"])
+    print("  Проверено:          %d" % progress["checked"])
+    print("  С арбитром:         %d" % progress["with_referee"])
+    print("  Осталось:           %d" % (progress["finished"] - progress["checked"]))
+    print("=" * 70)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -1288,6 +1342,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_health = sub.add_parser("health", help="проверить пульс, отправки и очередь")
     p_health.set_defaults(func=cmd_health)
+
+    p_ref = sub.add_parser("sync-referees", help="собрать арбитров по матчам")
+    p_ref.add_argument("--limit", type=int, default=200)
+    p_ref.add_argument("--pause", type=float, default=0.1)
+    p_ref.set_defaults(func=cmd_sync_referees)
 
     return parser
 
