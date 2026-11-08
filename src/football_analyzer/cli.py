@@ -1038,6 +1038,16 @@ async def _accuracy(dsn: str, days: int) -> dict:
         bucket[0] += (probability - outcome) ** 2
         bucket[1] += 1.0
 
+    def add_brier_multi(
+        league: str, name: str, probabilities: tuple[float, ...], outcomes: tuple[float, ...]
+    ) -> None:
+        bucket = brier.setdefault(league, {}).setdefault(name, [0.0, 0.0])
+        bucket[0] += sum(
+            (probability - outcome) ** 2
+            for probability, outcome in zip(probabilities, outcomes, strict=True)
+        )
+        bucket[1] += 1.0
+
     def add(bucket: dict, name: str, probability: float, hit: bool) -> None:
         row = bucket.setdefault(name, {"n": 0, "hits": 0})
         row["n"] += 1
@@ -1072,7 +1082,18 @@ async def _accuracy(dsn: str, days: int) -> dict:
         probability = outcomes[pick]
         hit = pick == actual_outcome
         add(stats, "исход", probability, hit)
-        add_brier(cid, "исход", probability, 1.0 if hit else 0.0)
+        # Brier для исхода считается по всем трём классам, а не по выбранному:
+        # иначе метрика не наказывает за уверенную ошибку.
+        add_brier_multi(
+            cid,
+            "исход",
+            outcomes,
+            (1.0, 0.0, 0.0)
+            if actual_outcome == 0
+            else (0.0, 1.0, 0.0)
+            if actual_outcome == 1
+            else (0.0, 0.0, 1.0),
+        )
         if probability >= 0.6:
             add(confident, "исход", probability, hit)
 
@@ -1080,7 +1101,7 @@ async def _accuracy(dsn: str, days: int) -> dict:
         probability = forecast.total[2.5]
         hit = (total_goals > 2.5) == (probability > 0.5)
         add(stats, "тотал 2,5", probability, hit)
-        add_brier(cid, "тотал 2,5", probability, 1.0 if hit else 0.0)
+        add_brier(cid, "тотал 2,5", probability, 1.0 if total_goals > 2.5 else 0.0)
         if probability >= 0.6 or probability <= 0.4:
             add(confident, "тотал 2,5", probability, hit)
 
@@ -1089,7 +1110,7 @@ async def _accuracy(dsn: str, days: int) -> dict:
             probability = forecast.corners[9.5]
             hit = (corners > 9.5) == (probability > 0.5)
             add(stats, "углы 9,5", probability, hit)
-            add_brier(cid, "углы 9,5", probability, 1.0 if hit else 0.0)
+            add_brier(cid, "углы 9,5", probability, 1.0 if corners > 9.5 else 0.0)
             if probability >= 0.6 or probability <= 0.4:
                 add(confident, "углы 9,5", probability, hit)
 
@@ -1098,7 +1119,7 @@ async def _accuracy(dsn: str, days: int) -> dict:
             probability = forecast.yellow[4.5]
             hit = (cards > 4.5) == (probability > 0.5)
             add(stats, "ЖК 4,5", probability, hit)
-            add_brier(cid, "ЖК 4,5", probability, 1.0 if hit else 0.0)
+            add_brier(cid, "ЖК 4,5", probability, 1.0 if cards > 4.5 else 0.0)
             if probability >= 0.6 or probability <= 0.4:
                 add(confident, "ЖК 4,5", probability, hit)
 
