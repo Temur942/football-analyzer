@@ -57,7 +57,7 @@ INDEX_HEAD = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Статьи — Football Analyzer</title>
-<meta name="description" content="Разборы футбольных матчей: вероятности голов, углов и карточек по модели.">
+<meta name="description" content="Разборы матчей: вероятности голов, углов и карточек.">
 <link rel="stylesheet" href="../fonts/onest.css">
 <link rel="stylesheet" href="../style.css">
 </head>

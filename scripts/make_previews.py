@@ -45,6 +45,9 @@ async def main() -> None:
     parser.add_argument("--competition", default="", help="подстрока названия соревнования")
     parser.add_argument("--groups", type=int, default=4, help="на сколько постов разбить")
     parser.add_argument("--per-group", type=int, default=4)
+    parser.add_argument(
+        "--slug-prefix", default="", help="часть слага, чтобы группы не перезаписывали друг друга"
+    )
     args = parser.parse_args()
 
     target = datetime.strptime(args.date, "%Y-%m-%d").replace(tzinfo=MSK)
@@ -101,7 +104,7 @@ async def main() -> None:
 
         if not lines:
             continue
-        slug = "%s-group-%d" % (args.date, number)
+        slug = "%s-%s-group-%d" % (args.date, args.slug_prefix or "matches", number)
         title = "Матчи сборных %s: группа %d" % (
             target.strftime("%d.%m"),
             number,
