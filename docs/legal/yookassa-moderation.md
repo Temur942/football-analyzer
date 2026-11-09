@@ -17,7 +17,7 @@
 | Статус | плательщик налога на профессиональный доход (НПД) |
 | E-mail | khidrov@yandex.ru |
 | Телефон | __ (указать) |
-| Адрес сайта | __ (домен после покупки) |
+| Адрес сайта | https://footballinho.ru |
 | Сфера | информационно-аналитические услуги, цифровая подписка |
 
 ## 2. Что продаётся
@@ -68,13 +68,13 @@
 
 ## 6. Ссылки для модерации
 
-- Сайт: `__`
-- Страница тарифов: `__/prices.html`
-- Публичная оферта: `__/offer.html`
-- Пользовательское соглашение: `__/terms.html`
-- Политика обработки персональных данных: `__/privacy.html`
+- Сайт: https://footballinho.ru
+- Страница тарифов: https://footballinho.ru/prices.html
+- Публичная оферта: https://footballinho.ru/offer.html
+- Пользовательское соглашение: https://footballinho.ru/terms.html
+- Политика обработки персональных данных: https://footballinho.ru/privacy.html
 - Telegram-бот: https://t.me/footballizator_bot
-- Telegram-канал: `__` (ссылка-приглашение)
+- Telegram-канал: https://t.me/+gZG2JXSaUdBmMzAy
 
 ## 7. Ответы на типовые вопросы модерации
 
