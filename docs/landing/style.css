@@ -154,3 +154,12 @@ footer {
 .post ul { margin: 12px 0 20px; }
 .post .muted { margin-bottom: 0; }
 .post .card { margin-top: 40px; }
+
+/* Фильтры матч-центра */
+.filters { display: flex; gap: 12px; margin: 16px 0 8px; flex-wrap: wrap; }
+.filters input, .filters select {
+  background: var(--glass); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 14px; font: inherit; min-width: 220px;
+}
+.filters input:focus, .filters select:focus { outline: 2px solid var(--accent); }
