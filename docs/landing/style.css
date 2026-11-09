@@ -146,3 +146,11 @@ footer {
 .legal p, .legal li { color: var(--muted); }
 .legal ul { padding-left: 20px; }
 .table-row { border-bottom: 1px solid var(--border); padding: 8px 0; color: var(--muted); }
+
+/* Статьи блога */
+.post h1 { font-size: clamp(28px, 4vw, 40px); letter-spacing: -.02em; margin: 8px 0 20px; }
+.post h2 { font-size: 22px; margin-top: 36px; }
+.post p { color: var(--text); opacity: .92; }
+.post ul { margin: 12px 0 20px; }
+.post .muted { margin-bottom: 0; }
+.post .card { margin-top: 40px; }

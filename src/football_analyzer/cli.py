@@ -1316,6 +1316,37 @@ def cmd_digest(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _seed_blog(dsn: str, directory: str) -> tuple[int, int]:
+    from football_analyzer.blog import load_posts
+
+    posts = load_posts(Path(directory))
+    items = [{"kind": "text", "body": post.telegram} for post in posts if post.telegram]
+    pool = await db.connect(dsn)
+    try:
+        await db.apply_schema(pool)
+        added = await db.add_posts(pool, items)
+        pending = await db.pending_posts(pool)
+    finally:
+        await pool.close()
+    return added, pending
+
+
+def cmd_seed_blog(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        added, pending = asyncio.run(_seed_blog(settings.require_database_url(), args.dir))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    print("=" * 60)
+    print("  СТАТЬИ В ОЧЕРЕДЬ КАНАЛА")
+    print("=" * 60)
+    print("  Добавлено статей: %d" % added)
+    print("  Ждёт публикации:  %d" % pending)
+    print("=" * 60)
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="football-analyzer", description="Служебные команды")
     parser.add_argument("--log-level", default=None)
@@ -1438,6 +1469,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_digest = sub.add_parser("digest", help="предпросмотр недельной сводки")
     p_digest.set_defaults(func=cmd_digest)
+
+    p_blog = sub.add_parser("seed-blog", help="поставить статьи блога в очередь канала")
+    p_blog.add_argument("--dir", default="docs/blog")
+    p_blog.set_defaults(func=cmd_seed_blog)
 
     return parser
 
