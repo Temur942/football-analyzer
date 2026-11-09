@@ -10,6 +10,7 @@ import json
 import logging
 from datetime import UTC, datetime
 
+import aiohttp
 import asyncpg
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
@@ -25,6 +26,8 @@ from football_analyzer.analysis.forecast import build_forecast, render_payload, 
 from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models
 from football_analyzer.bot.access import BETA_TEXT, CONSENT_TEXT
 from football_analyzer.bot.docs import DOCUMENTS, delete_messages, send_document
+from football_analyzer.config import get_settings
+from football_analyzer.payments.yookassa import create_payment
 from football_analyzer.storage import db
 
 log = logging.getLogger(__name__)
@@ -611,13 +614,57 @@ async def handle_pay(callback: CallbackQuery, pool: asyncpg.Pool | None = None) 
     await _event(pool, callback.from_user.id, "pay_click")
     days = int((callback.data or "pay:30").split(":")[1])
     days, price = tariff(days)
-    if callback.message:
+    if not isinstance(callback.message, Message):
+        await callback.answer()
+        return
+
+    settings = get_settings()
+    if pool is None or not settings.yookassa_configured:
         await callback.message.answer(
             "💳 <b>Оплата %d ₽</b>\n\n"
-            "Платёжный сервис подключается — ЮKassa на модерации.\n"
-            "Пока могу выдать доступ вручную: напишите @khid71." % price,
+            "Платёжный сервис подключается. Пока могу выдать доступ вручную: "
+            "напишите @khid71." % price,
             reply_markup=order_menu(days, price),
         )
+        await callback.answer()
+        return
+
+    try:
+        row_id = await db.create_payment(pool, callback.from_user.id, days, price)
+        async with aiohttp.ClientSession() as session:
+            payment = await create_payment(
+                session,
+                shop_id=settings.yookassa_shop_id or "",
+                secret_key=settings.yookassa_secret_key or "",
+                amount_rub=price,
+                description="Подписка Football Analyzer, %d дней" % days,
+                return_url=settings.yookassa_return_url or "https://t.me/footballizator_bot",
+                chat_id=callback.from_user.id,
+                days=days,
+            )
+        await db.attach_payment_id(pool, row_id, str(payment["id"]))
+        url = (payment.get("confirmation") or {}).get("confirmation_url")
+        if not url:
+            raise RuntimeError("ЮKassa не вернула ссылку на оплату")
+    except Exception as exc:  # noqa: BLE001
+        log.error("не удалось создать платёж: %s", exc)
+        await callback.message.answer(
+            "Не получилось создать платёж. Попробуйте ещё раз через минуту или напишите @khid71."
+        )
+        await callback.answer("Ошибка платежа", show_alert=True)
+        return
+
+    builder = InlineKeyboardBuilder()
+    builder.button(text="💳 Перейти к оплате %d ₽" % price, url=url)
+    builder.button(text="⬅️ К тарифам", callback_data=CALLBACK_TARIFFS)
+    builder.adjust(1)
+    await callback.message.answer(
+        "🧾 <b>Заказ создан</b>\n\n"
+        "Срок: <b>%d дней</b>\nЦена: <b>%d ₽</b>\n\n"
+        "Нажмите «Перейти к оплате» — откроется страница ЮKassa. "
+        "Доступ включится автоматически в течение пары минут после оплаты." % (days, price),
+        reply_markup=builder.as_markup(),
+    )
     await callback.answer()
 
 

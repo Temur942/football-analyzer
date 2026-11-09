@@ -12,6 +12,7 @@ import logging
 import os
 import time
 
+import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
@@ -21,6 +22,7 @@ from football_analyzer import __version__
 from football_analyzer.bot import handlers
 from football_analyzer.bot.access import AccessMiddleware
 from football_analyzer.config import get_settings
+from football_analyzer.payments.yookassa import fetch_payment
 from football_analyzer.scheduler.delivery import deliver_due
 from football_analyzer.scheduler.digest import send_digest
 from football_analyzer.scheduler.publisher import accuracy_post, publish_next
@@ -170,6 +172,54 @@ async def main() -> None:
                     continue
 
     scheduler.add_job(send_due_forecasts, "interval", minutes=10, id="deliver")
+
+    async def poll_payments() -> None:
+        """Дожать статусы незакрытых платежей. Оплата не должна теряться."""
+        if pool is None or not settings.yookassa_configured:
+            return
+        try:
+            rows = await db.pending_payments(pool)
+        except Exception as exc:  # noqa: BLE001
+            log.error("не удалось получить платежи: %s", exc)
+            return
+        if not rows:
+            return
+        async with aiohttp.ClientSession() as session:
+            for row in rows:
+                try:
+                    data = await fetch_payment(
+                        session,
+                        shop_id=settings.yookassa_shop_id or "",
+                        secret_key=settings.yookassa_secret_key or "",
+                        payment_id=str(row["yookassa_id"]),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    log.warning("статус платежа %s не получен: %s", row["id"], exc)
+                    continue
+                status = str(data.get("status") or "")
+                chat_id = int(row["chat_id"])
+                if status == "succeeded":
+                    await db.close_payment(pool, row["id"], "succeeded")
+                    until = await db.grant_days(pool, chat_id, int(row["days"]))
+                    await db.log_event(pool, chat_id, "payment_succeeded")
+                    try:
+                        await bot.send_message(
+                            chat_id,
+                            "OK оплата получена. Подписка активна до %s."
+                            % until.strftime("%d.%m.%Y"),
+                        )
+                    except Exception:  # noqa: BLE001
+                        pass
+                    try:
+                        await db.referral_bonus(pool, chat_id)
+                    except Exception as exc:  # noqa: BLE001
+                        log.error("бонус рефералу не начислен: %s", exc)
+                    log.info("платёж %s оплачен, подписка до %s", row["id"], until)
+                elif status == "canceled":
+                    await db.close_payment(pool, row["id"], "canceled")
+                    log.info("платёж %s отменён", row["id"])
+
+    scheduler.add_job(poll_payments, "interval", minutes=2, id="poll_payments")
 
     db_failures = 0
 

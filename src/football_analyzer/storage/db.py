@@ -967,3 +967,43 @@ async def match_for_forecast(pool: asyncpg.Pool, match_id: int) -> asyncpg.Recor
             """,
             match_id,
         )
+
+
+async def create_payment(pool: asyncpg.Pool, chat_id: int, days: int, amount: int) -> int:
+    """Записать начало оплаты. Возвращает id записи."""
+    async with pool.acquire() as conn:
+        return int(
+            await conn.fetchval(
+                "INSERT INTO payments (chat_id, days, amount) VALUES ($1, $2, $3) RETURNING id",
+                chat_id,
+                days,
+                amount,
+            )
+        )
+
+
+async def attach_payment_id(pool: asyncpg.Pool, row_id: int, yookassa_id: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE payments SET yookassa_id = $2 WHERE id = $1", row_id, yookassa_id
+        )
+
+
+async def pending_payments(pool: asyncpg.Pool, limit: int = 50) -> list[asyncpg.Record]:
+    """Незакрытые платежи: по ним ещё нужно узнать статус."""
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            "SELECT id, chat_id, days, amount, yookassa_id FROM payments"
+            " WHERE status = 'pending' AND yookassa_id IS NOT NULL"
+            " ORDER BY created_at LIMIT $1",
+            limit,
+        )
+
+
+async def close_payment(pool: asyncpg.Pool, row_id: int, status: str) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE payments SET status = $2, paid_at = now() WHERE id = $1",
+            row_id,
+            status,
+        )
