@@ -98,6 +98,12 @@ def best(probability: float, label: str) -> str:
     return "ТМ %s" % label, (1 - probability) * 100
 
 
+def line_text(probability: float, label: str) -> str:
+    """Текстовая подпись линии: «ТБ 2,5 — 54%»."""
+    name, percent = best(probability, label)
+    return "%s — %.0f%%" % (name, percent)
+
+
 def bar(probability: float, label: str) -> str:
     """Ячейка с полоской вероятности — нагляднее, чем просто процент."""
     name, percent = best(probability, label)
@@ -131,11 +137,11 @@ def render_match(match, forecast, competition_name: str) -> str:
         ),
         (
             "Тотал матча",
-            best(forecast.total[2.5], "2,5") + " · " + best(forecast.total[1.5], "1,5"),
+            line_text(forecast.total[2.5], "2,5") + " · " + line_text(forecast.total[1.5], "1,5"),
         ),
-        ("Первый тайм", best(forecast.first_half[0.5], "0,5")),
-        ("Угловые", best(forecast.corners[9.5], "9,5")),
-        ("Жёлтые карточки", best(forecast.yellow[4.5], "4,5")),
+        ("Первый тайм", line_text(forecast.first_half[0.5], "0,5")),
+        ("Угловые", line_text(forecast.corners[9.5], "9,5")),
+        ("Жёлтые карточки", line_text(forecast.yellow[4.5], "4,5")),
         ("Вероятные счета", score),
     ]
     table = "".join("<tr><th>%s</th><td>%s</td></tr>" % (name, value) for name, value in rows)
