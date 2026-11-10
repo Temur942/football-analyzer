@@ -163,3 +163,166 @@ footer {
   padding: 10px 14px; font: inherit; min-width: 220px;
 }
 .filters input:focus, .filters select:focus { outline: 2px solid var(--accent); }
+
+/* ========================= Футбольный стиль ========================= */
+:root {
+  --pitch: #0c2f22;
+  --pitch-line: rgba(237, 230, 218, .16);
+  --green: #10b981;
+  --green-soft: rgba(16, 185, 129, .16);
+  --amber: #f59e0b;
+}
+
+/* Поле в шапке: разметка + свечение */
+.hero-visual {
+  position: relative;
+  max-width: 720px;
+  height: 190px;
+  margin: 0 auto 28px;
+  border-radius: 20px;
+  overflow: hidden;
+  background:
+    radial-gradient(60% 120% at 50% 0%, rgba(16, 185, 129, .22) 0%, transparent 70%),
+    repeating-linear-gradient(90deg, var(--pitch) 0 44px, #0a281d 44px 88px);
+  border: 1px solid var(--pitch-line);
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, .45);
+}
+.hero-visual::before {
+  content: "";
+  position: absolute;
+  inset: 18px;
+  border: 2px solid var(--pitch-line);
+  border-radius: 10px;
+}
+.hero-visual::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  bottom: 18px;
+  width: 2px;
+  background: var(--pitch-line);
+  transform: translateX(-1px);
+}
+.pitch-circle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 96px;
+  height: 96px;
+  margin: -48px 0 0 -48px;
+  border: 2px solid var(--pitch-line);
+  border-radius: 50%;
+}
+.pitch-ball {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, #fff 0%, #d9d4c9 55%, #9d978b 100%);
+  box-shadow: 0 0 26px rgba(255, 255, 255, .45);
+  animation: ballPulse 3.2s ease-in-out infinite;
+}
+.pitch-ball::after {
+  content: "";
+  position: absolute;
+  inset: 7px;
+  border-radius: 50%;
+  border: 1px dashed rgba(0, 0, 0, .28);
+}
+@keyframes ballPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+/* Полоса статистики */
+.stats-band {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 14px;
+  margin: 8px 0 12px;
+}
+.stat {
+  text-align: center;
+  padding: 18px 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--glass);
+}
+.stat-value {
+  display: block;
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  color: var(--green);
+}
+.stat-label { color: var(--muted); font-size: 13px; }
+
+/* Полоски вероятностей в таблицах */
+.prob { display: flex; align-items: center; gap: 8px; min-width: 168px; }
+.prob-label { color: var(--dim); font-size: 12px; white-space: nowrap; }
+.prob-bar {
+  position: relative;
+  flex: 1;
+  height: 7px;
+  border-radius: 99px;
+  background: rgba(243, 243, 243, .09);
+  overflow: hidden;
+}
+.prob-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--green) 0%, var(--amber) 100%);
+}
+.prob-value { font-weight: 700; font-size: 13px; min-width: 38px; text-align: right; }
+
+/* Мини-бейдж команды */
+.team { display: inline-flex; align-items: center; gap: 8px; }
+.team-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--green-soft);
+  border: 1px solid rgba(16, 185, 129, .35);
+  color: var(--green);
+  font-size: 11px;
+  font-weight: 700;
+  flex: 0 0 auto;
+}
+
+/* Чипы соревнований */
+.chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--glass);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+/* Заголовок раздела с подчёркиванием */
+.section-title { position: relative; padding-bottom: 10px; }
+.section-title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 56px;
+  height: 3px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--green), var(--amber));
+}
+
+/* Таблица матч-центра: компактнее и живее */
+.matches th { font-size: 12px; }
+.matches td { vertical-align: middle; }
+.matches tbody tr { transition: background .15s; }
+.matches tbody tr:hover { background: rgba(16, 185, 129, .06); }

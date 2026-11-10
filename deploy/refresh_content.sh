@@ -30,5 +30,8 @@ $PY scripts/make_previews.py --date "$TOMORROW" --groups 1 --per-group 5 \
 echo "=== страницы блога ==="
 $PY scripts/build_blog.py 2>&1 | tail -1
 
+echo "=== счётчик Метрики ==="
+$PY scripts/inject_metrika.py 2>&1 | tail -1
+
 echo "=== очередь канала ==="
 $PY -m football_analyzer.cli seed-blog --dir docs/blog 2>&1 | tail -3
