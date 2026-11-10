@@ -425,23 +425,6 @@ async def main() -> None:
     )
 
     scheduler.add_job(
-        publish_to_vk,
-        "cron",
-        hour=10,
-        minute=5,
-        timezone="Europe/Moscow",
-        id="publish_vk_morning",
-    )
-    scheduler.add_job(
-        publish_to_vk,
-        "cron",
-        hour=18,
-        minute=5,
-        timezone="Europe/Moscow",
-        id="publish_vk_evening",
-    )
-
-    scheduler.add_job(
         publish_to_channel,
         "cron",
         hour=18,
