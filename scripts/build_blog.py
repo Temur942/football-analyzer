@@ -28,7 +28,7 @@ HEAD = """<!doctype html>
   <nav>
     <a href="/blog/">Статьи</a>
     <a href="/#prices">Тарифы</a>
-    <a class="cta" href="https://t.me/footballizator_bot">Открыть бота</a>
+    <a class="cta" href="https://t.me/footballizator_bot?start=ch_site">Открыть бота</a>
   </nav>
 </header>
 <main>
@@ -40,7 +40,7 @@ HEAD = """<!doctype html>
   <h3>Полная раскладка — в боте</h3>
   <p>Углы, карточки, голы каждой команды и вероятный счёт по 20 соревнованиям.
      Прогноз приходит за 5 часов до матча.</p>
-  <p><a class="button" href="https://t.me/footballizator_bot">Открыть бота</a></p>
+  <p><a class="button" href="https://t.me/footballizator_bot?start=ch_site">Открыть бота</a></p>
 </div>
 </article>
 </main>
@@ -67,7 +67,7 @@ INDEX_HEAD = """<!doctype html>
   <a class="brand" href="/">⚽ Football Analyzer</a>
   <nav>
     <a href="/#prices">Тарифы</a>
-    <a class="cta" href="https://t.me/footballizator_bot">Открыть бота</a>
+    <a class="cta" href="https://t.me/footballizator_bot?start=ch_site">Открыть бота</a>
   </nav>
 </header>
 <main>

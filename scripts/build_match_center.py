@@ -23,7 +23,7 @@ from football_analyzer.teams_ru import to_russian
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "landing"
 BASE_URL = "https://footballinho.ru"
-BOT_URL = "https://t.me/footballizator_bot"
+BOT_URL = "https://t.me/footballizator_bot?start=ch_site"
 
 PAGE = """<!doctype html>
 <html lang="ru">
