@@ -25,7 +25,12 @@ from football_analyzer.config import get_settings
 from football_analyzer.payments.yookassa import fetch_payment
 from football_analyzer.scheduler.delivery import deliver_due
 from football_analyzer.scheduler.digest import send_digest
-from football_analyzer.scheduler.publisher import accuracy_post, publish_next
+from football_analyzer.scheduler.publisher import (
+    accuracy_post,
+    build_forecast_post,
+    publish_next,
+)
+from football_analyzer.social.vk import post_to_vk
 from football_analyzer.storage import db
 
 log = logging.getLogger(__name__)
@@ -362,6 +367,54 @@ async def main() -> None:
                 except Exception:  # noqa: BLE001
                     continue
 
+    async def publish_to_vk() -> None:
+        """Пост в ВК: те же материалы, что в канале, но своим расписанием."""
+        if pool is None or not settings.vk_token or not settings.vk_group_id:
+            return
+        try:
+            row = await db.next_post_for_vk(pool)
+            if row is None:
+                return
+            text = row["body"]
+            if row["kind"] == "forecast" or not text:
+                built = await build_forecast_post(pool)
+                if built is None:
+                    return
+                text = built[0]
+            async with aiohttp.ClientSession() as session:
+                post_id = await post_to_vk(
+                    session,
+                    token=settings.vk_token,
+                    group_id=settings.vk_group_id,
+                    message=text,
+                )
+            await db.mark_vk_posted(pool, row["id"])
+            log.info("ВК: опубликован пост %s (vk id %s)", row["id"], post_id)
+        except Exception as exc:  # noqa: BLE001
+            log.error("ВК: публикация не удалась: %s", exc)
+            for admin_id in settings.admin_ids:
+                try:
+                    await bot.send_message(admin_id, "ВК: пост не ушёл: %s" % exc)
+                except Exception:  # noqa: BLE001
+                    continue
+
+    scheduler.add_job(
+        publish_to_vk,
+        "cron",
+        hour=10,
+        minute=5,
+        timezone="Europe/Moscow",
+        id="publish_vk_morning",
+    )
+    scheduler.add_job(
+        publish_to_vk,
+        "cron",
+        hour=18,
+        minute=5,
+        timezone="Europe/Moscow",
+        id="publish_vk_evening",
+    )
+
     scheduler.add_job(
         publish_to_channel,
         "cron",
@@ -370,6 +423,55 @@ async def main() -> None:
         timezone="Europe/Moscow",
         id="publish_morning",
     )
+
+    async def publish_to_vk() -> None:
+        """Пост в ВК: те же материалы, что в канале, но своим расписанием."""
+        if pool is None or not settings.vk_token or not settings.vk_group_id:
+            return
+        try:
+            row = await db.next_post_for_vk(pool)
+            if row is None:
+                return
+            text = row["body"]
+            if row["kind"] == "forecast" or not text:
+                built = await build_forecast_post(pool)
+                if built is None:
+                    return
+                text = built[0]
+            async with aiohttp.ClientSession() as session:
+                post_id = await post_to_vk(
+                    session,
+                    token=settings.vk_token,
+                    group_id=settings.vk_group_id,
+                    message=text,
+                )
+            await db.mark_vk_posted(pool, row["id"])
+            log.info("ВК: опубликован пост %s (vk id %s)", row["id"], post_id)
+        except Exception as exc:  # noqa: BLE001
+            log.error("ВК: публикация не удалась: %s", exc)
+            for admin_id in settings.admin_ids:
+                try:
+                    await bot.send_message(admin_id, "ВК: пост не ушёл: %s" % exc)
+                except Exception:  # noqa: BLE001
+                    continue
+
+    scheduler.add_job(
+        publish_to_vk,
+        "cron",
+        hour=10,
+        minute=5,
+        timezone="Europe/Moscow",
+        id="publish_vk_morning",
+    )
+    scheduler.add_job(
+        publish_to_vk,
+        "cron",
+        hour=18,
+        minute=5,
+        timezone="Europe/Moscow",
+        id="publish_vk_evening",
+    )
+
     scheduler.add_job(
         publish_to_channel,
         "cron",

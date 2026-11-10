@@ -33,6 +33,9 @@ class Settings(BaseSettings):
     # Канал для публикаций. Приватный канал задаётся числовым id (-100...).
     # Пустое значение = автопубликация выключена.
     channel_id: str = ""
+    # Публикация в ВК: id сообщества и токен с правами на записи.
+    vk_group_id: str = ""
+    vk_token: str = ""
 
     # PostgreSQL на сервере (решение заказчика). Секрет: только .env.local или
     # EnvironmentFile systemd, в git не попадает.

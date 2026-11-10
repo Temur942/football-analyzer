@@ -1025,3 +1025,19 @@ async def matches_for_archive(pool: asyncpg.Pool, ids: list[int]) -> list[asyncp
             """,
             ids,
         )
+
+
+async def next_post_for_vk(pool: asyncpg.Pool) -> asyncpg.Record | None:
+    """Следующий пост, ещё не опубликованный в ВК."""
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
+            "SELECT id, kind, body FROM channel_posts"
+            " WHERE vk_published_at IS NULL ORDER BY id LIMIT 1"
+        )
+
+
+async def mark_vk_posted(pool: asyncpg.Pool, post_id: int) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE channel_posts SET vk_published_at = now() WHERE id = $1", post_id
+        )
