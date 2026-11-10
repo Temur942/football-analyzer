@@ -92,9 +92,30 @@ def slugify(value: str) -> str:
 
 
 def best(probability: float, label: str) -> str:
+    """Подпись линии: сторона и процент."""
     if probability >= 1 - probability:
-        return "ТБ %s — %.0f%%" % (label, probability * 100)
-    return "ТМ %s — %.0f%%" % (label, (1 - probability) * 100)
+        return "ТБ %s" % label, probability * 100
+    return "ТМ %s" % label, (1 - probability) * 100
+
+
+def bar(probability: float, label: str) -> str:
+    """Ячейка с полоской вероятности — нагляднее, чем просто процент."""
+    name, percent = best(probability, label)
+    return (
+        '<div class="prob"><span class="prob-label">%s</span>'
+        '<span class="prob-bar"><span style="width:%.0f%%"></span></span>'
+        '<span class="prob-value">%.0f%%</span></div>' % (name, percent, percent)
+    )
+
+
+def team(name: str) -> str:
+    """Команда с мини-бейджем из первых букв."""
+    russian = to_russian(name)
+    initials = "".join(part[0] for part in russian.split()[:2]).upper()
+    return '<span class="team"><span class="team-badge">%s</span>%s</span>' % (
+        html.escape(initials),
+        html.escape(russian),
+    )
 
 
 def render_match(match, forecast, competition_name: str) -> str:
@@ -257,13 +278,13 @@ async def build() -> None:
                 kickoff.strftime("%Y-%m-%d"),
                 html.escape(text, quote=True),
                 kickoff.strftime("%d.%m %H:%M"),
-                html.escape(str(match["name_ru"])),
+                '<span class="chip">%s</span>' % html.escape(str(match["name_ru"])),
                 link,
-                home,
-                away,
-                best(forecast.total[2.5], "2,5"),
-                best(forecast.corners[9.5], "9,5"),
-                best(forecast.yellow[4.5], "4,5"),
+                team(match["home_team"]),
+                team(match["away_team"]),
+                bar(forecast.total[2.5], "2,5"),
+                bar(forecast.corners[9.5], "9,5"),
+                bar(forecast.yellow[4.5], "4,5"),
             )
         )
 
@@ -314,11 +335,11 @@ async def build() -> None:
                 % (
                     kickoff.strftime("%d.%m %H:%M"),
                     match["id"],
-                    home,
-                    away,
-                    best(forecast.total[2.5], "2,5"),
-                    best(forecast.corners[9.5], "9,5"),
-                    best(forecast.yellow[4.5], "4,5"),
+                    team(match["home_team"]),
+                    team(match["away_team"]),
+                    bar(forecast.total[2.5], "2,5"),
+                    bar(forecast.corners[9.5], "9,5"),
+                    bar(forecast.yellow[4.5], "4,5"),
                 )
             )
         content = (
