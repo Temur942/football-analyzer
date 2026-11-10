@@ -151,6 +151,47 @@ def render_match(match, forecast, competition_name: str) -> str:
     )
 
 
+def render_result(row) -> str:
+    """Страница прошедшего матча: результат и честная пометка."""
+    kickoff = row["kickoff_utc"].astimezone(MSK)
+    home = html.escape(to_russian(row["home_team"]))
+    away = html.escape(to_russian(row["away_team"]))
+    score = "%s %d:%d %s" % (home, row["home_goals"] or 0, row["away_goals"] or 0, away)
+    stats = []
+    if row["home_corners"] is not None:
+        stats.append(("Угловые", "%d:%d" % (row["home_corners"], row["away_corners"] or 0)))
+    if row["home_yellow"] is not None:
+        stats.append(("Жёлтые карточки", "%d:%d" % (row["home_yellow"], row["away_yellow"] or 0)))
+    table = "".join("<tr><th>%s</th><td>%s</td></tr>" % pair for pair in stats)
+    content = (
+        '<p class="muted">%s · %s МСК</p><h1>%s</h1>'
+        "<p>Матч завершён. Прогноз по нему был опубликован до начала игры.</p>"
+        "<table>%s</table>"
+        % (html.escape(str(row["name_ru"])), kickoff.strftime("%d.%m %H:%M"), score, table)
+    )
+    title = "%s: результат матча %s" % (score, kickoff.strftime("%d.%m.%Y"))
+    return PAGE.format(
+        title=html.escape(title),
+        description=html.escape(
+            "%s — итог матча %s, статистика углов и карточек."
+            % (score, kickoff.strftime("%d.%m.%Y"))
+        )[:300],
+        canonical="%s/match/%d/" % (BASE_URL, row["id"]),
+        jsonld=json.dumps(
+            {
+                "@context": "https://schema.org",
+                "@type": "SportsEvent",
+                "name": score,
+                "startDate": row["kickoff_utc"].isoformat(),
+                "eventStatus": "https://schema.org/EventScheduled",
+            },
+            ensure_ascii=False,
+        ),
+        content=content,
+        bot=BOT_URL,
+    )
+
+
 async def build() -> None:
     pool = await db.connect(os.environ["DATABASE_URL"])
     rows = await db.upcoming_matches(pool, 14)
@@ -185,6 +226,22 @@ async def build() -> None:
         (directory / "index.html").write_text(
             render_match(match, forecast, str(match["name_ru"])), encoding="utf-8"
         )
+
+    # Страницы прошедших матчей: иначе они навсегда остаются «предстоящими».
+    upcoming_ids = {match["id"] for match, _ in prepared}
+    existing = [
+        int(path.name) for path in match_dir.iterdir() if path.is_dir() and path.name.isdigit()
+    ]
+    stale = [mid for mid in existing if mid not in upcoming_ids]
+    if stale:
+        pool = await db.connect(os.environ["DATABASE_URL"])
+        try:
+            archive = await db.matches_for_archive(pool, stale)
+        finally:
+            await pool.close()
+        for row in archive:
+            directory = match_dir / str(row["id"])
+            (directory / "index.html").write_text(render_result(row), encoding="utf-8")
 
     all_rows = []
     for match, forecast in prepared:

@@ -1007,3 +1007,21 @@ async def close_payment(pool: asyncpg.Pool, row_id: int, status: str) -> None:
             row_id,
             status,
         )
+
+
+async def matches_for_archive(pool: asyncpg.Pool, ids: list[int]) -> list[asyncpg.Record]:
+    """Завершённые матчи по списку id — для страниц-архива с результатом."""
+    if not ids:
+        return []
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            """
+            SELECT m.id, m.home_team, m.away_team, m.kickoff_utc,
+                   m.home_goals, m.away_goals, m.home_corners, m.away_corners,
+                   m.home_yellow, m.away_yellow, c.name_ru
+              FROM matches m
+              JOIN competitions c ON c.id = m.competition_id
+             WHERE m.id = ANY($1::bigint[]) AND m.status = 'finished'
+            """,
+            ids,
+        )
