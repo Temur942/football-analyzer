@@ -36,6 +36,7 @@ PAGE = """<!doctype html>
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{description}">
 <link rel="stylesheet" href="/fonts/onest.css">
+<meta name="yandex-verification" content="2d7c2dde8b71028d">
 <link rel="stylesheet" href="/style.css">
 <script type="application/ld+json">{jsonld}</script>
 </head>

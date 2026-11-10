@@ -25,6 +25,7 @@ TEMPLATE = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title} — Football Analyzer</title>
 {fonts}
+<meta name="yandex-verification" content="2d7c2dde8b71028d">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
