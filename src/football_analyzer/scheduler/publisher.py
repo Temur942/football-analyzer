@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import asyncpg
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
 from football_analyzer.analysis.forecast import MSK, Forecast, build_forecast
 from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models
 from football_analyzer.storage import db
+from football_analyzer.teams_ru import to_russian
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +68,7 @@ def post_text(forecast: Forecast, competition_name: str) -> str:
     )
 
 
-async def build_forecast_post(pool: asyncpg.Pool) -> tuple[str, int] | None:
+async def build_forecast_post(pool: asyncpg.Pool) -> dict | None:
     """Пост-прогноз по ближайшему матчу популярной лиги."""
     upcoming = await db.upcoming_matches(pool, 2)
     if not upcoming:
@@ -102,7 +104,19 @@ async def build_forecast_post(pool: asyncpg.Pool) -> tuple[str, int] | None:
             away_team=row["away_team"],
             kickoff_utc=row["kickoff_utc"],
         )
-        return post_text(forecast, row["name_ru"]), int(row["id"])
+        return {
+            "text": post_text(forecast, row["name_ru"]),
+            "match_id": int(row["id"]),
+            "competition": str(row["name_ru"]),
+            "home": to_russian(row["home_team"]),
+            "away": to_russian(row["away_team"]),
+            "kickoff": row["kickoff_utc"].astimezone(MSK).strftime("%d.%m, %H:%M МСК"),
+            "rows": [
+                ("Тотал 2,5", forecast.total[2.5]),
+                ("Углы 9,5", forecast.corners[9.5]),
+                ("ЖК 4,5", forecast.yellow[4.5]),
+            ],
+        }
     return None
 
 
@@ -150,19 +164,51 @@ async def publish_next(bot: object, pool: asyncpg.Pool, channel_id: str) -> bool
         return False
 
     text = row["body"]
-    match_id: int | None = None
+    card_data: dict | None = None
     if row["kind"] == "forecast" or not text:
         built = await build_forecast_post(pool)
         if built is None:
             log.warning("пост-прогноз не собран: нет матчей")
             return False
-        text, match_id = built
+        text = built["text"]
+        card_data = built
 
+    bot_url = "https://t.me/footballizator_bot"
+    if card_data is not None:
+        bot_url += "?start=match_%d" % card_data["match_id"]
     keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="Открыть бота", url="https://t.me/footballizator_bot")]
-        ]
+        inline_keyboard=[[InlineKeyboardButton(text="Открыть бота", url=bot_url)]]
     )
+    if card_data is not None:
+        # Карточка с цифрами: в ленте заметнее, чем текст.
+        try:
+            from football_analyzer.media.card import render_forecast_card
+
+            card_path = render_forecast_card(
+                competition=card_data["competition"],
+                home=card_data["home"],
+                away=card_data["away"],
+                kickoff=card_data["kickoff"],
+                rows=card_data["rows"],
+                out_path=Path("/tmp") / ("card_%d.png" % card_data["match_id"]),
+            )
+            caption = "⚽ <b>%s — %s</b>\n🕐 %s\n\nПолная раскладка — в боте." % (
+                card_data["home"],
+                card_data["away"],
+                card_data["kickoff"],
+            )
+            await bot.send_photo(  # type: ignore[attr-defined]
+                channel_id,
+                FSInputFile(card_path),
+                caption=caption,
+                reply_markup=keyboard,
+            )
+            await db.mark_posted(pool, row["id"])
+            log.info("опубликован пост-карточка id=%s", row["id"])
+            return True
+        except Exception as exc:  # noqa: BLE001
+            log.error("карточка не отправилась, отправляю текстом: %s", exc)
+
     await bot.send_message(  # type: ignore[attr-defined]
         channel_id, text, reply_markup=keyboard
     )

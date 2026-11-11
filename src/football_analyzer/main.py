@@ -380,7 +380,7 @@ async def main() -> None:
                 built = await build_forecast_post(pool)
                 if built is None:
                     return
-                text = built[0]
+                text = built["text"]
             async with aiohttp.ClientSession() as session:
                 post_id = await post_to_vk(
                     session,
