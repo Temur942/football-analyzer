@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 
 import asyncpg
@@ -208,6 +209,28 @@ async def publish_next(bot: object, pool: asyncpg.Pool, channel_id: str) -> bool
             return True
         except Exception as exc:  # noqa: BLE001
             log.error("карточка не отправилась, отправляю текстом: %s", exc)
+
+    # Текстовый пост: обложка с заголовком + текст в подписи (лимит 1024).
+    try:
+        from football_analyzer.media.card import render_text_card
+
+        title = re.sub(r"<[^>]+>", "", text.splitlines()[0]).strip() or "Football Analyzer"
+        card_path = render_text_card(
+            title=title,
+            label="Разбор",
+            out_path=Path("/tmp") / ("card_text_%d.png" % row["id"]),
+        )
+        await bot.send_photo(  # type: ignore[attr-defined]
+            channel_id,
+            FSInputFile(card_path),
+            caption=text[:1024],
+            reply_markup=keyboard,
+        )
+        await db.mark_posted(pool, row["id"])
+        log.info("опубликован текстовый пост с карточкой id=%s", row["id"])
+        return True
+    except Exception as exc:  # noqa: BLE001
+        log.error("обложка не отправилась, отправляю текстом: %s", exc)
 
     await bot.send_message(  # type: ignore[attr-defined]
         channel_id, text, reply_markup=keyboard

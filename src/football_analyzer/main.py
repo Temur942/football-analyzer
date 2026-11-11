@@ -11,6 +11,7 @@ import asyncio
 import logging
 import os
 import time
+from pathlib import Path
 
 import aiohttp
 from aiogram import Bot, Dispatcher
@@ -30,7 +31,7 @@ from football_analyzer.scheduler.publisher import (
     build_forecast_post,
     publish_next,
 )
-from football_analyzer.social.vk import post_to_vk
+from football_analyzer.social.vk import post_to_vk, upload_wall_photo
 from football_analyzer.storage import db
 
 log = logging.getLogger(__name__)
@@ -381,12 +382,57 @@ async def main() -> None:
                 if built is None:
                     return
                 text = built["text"]
+            # Картинка: та же логика, что в Телеграме — карточка прогноза
+            # или обложка статьи.
+            image_path = None
+            try:
+                from football_analyzer.media.card import (
+                    render_forecast_card,
+                    render_text_card,
+                )
+
+                if row["kind"] == "forecast":
+                    built = await build_forecast_post(pool)
+                    if built is not None:
+                        image_path = render_forecast_card(
+                            competition=built["competition"],
+                            home=built["home"],
+                            away=built["away"],
+                            kickoff=built["kickoff"],
+                            rows=built["rows"],
+                            out_path=Path("/tmp") / ("vk_card_%d.png" % row["id"]),
+                        )
+                        text = built["text"]
+                else:
+                    import re as _re
+
+                    title = _re.sub(r"<[^>]+>", "", text.splitlines()[0]).strip()
+                    image_path = render_text_card(
+                        title=title or "Football Analyzer",
+                        label="Разбор",
+                        out_path=Path("/tmp") / ("vk_text_%d.png" % row["id"]),
+                    )
+            except Exception as exc:  # noqa: BLE001
+                log.error("ВК: картинка не подготовлена: %s", exc)
+
             async with aiohttp.ClientSession() as session:
+                attachment = None
+                if image_path is not None:
+                    try:
+                        attachment = await upload_wall_photo(
+                            session,
+                            token=settings.vk_token,
+                            group_id=settings.vk_group_id,
+                            image_path=image_path,
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        log.error("ВК: фото не загрузилось, пост без картинки: %s", exc)
                 post_id = await post_to_vk(
                     session,
                     token=settings.vk_token,
                     group_id=settings.vk_group_id,
                     message=text,
+                    attachment=attachment,
                 )
             await db.mark_vk_posted(pool, row["id"])
             log.info("ВК: опубликован пост %s (vk id %s)", row["id"], post_id)

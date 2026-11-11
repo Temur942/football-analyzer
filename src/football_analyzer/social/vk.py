@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import re
+from pathlib import Path
 
 import aiohttp
 
@@ -25,12 +26,62 @@ def plain_text(html_text: str) -> str:
     return text.strip()
 
 
+async def upload_wall_photo(
+    session: aiohttp.ClientSession,
+    *,
+    token: str,
+    group_id: str,
+    image_path: Path,
+) -> str:
+    """Загрузить картинку в ВК и получить attachment для записи.
+
+    Три шага по документации ВК: получить адрес загрузки, отправить файл,
+    сохранить фото на стене сообщества.
+    """
+    params = {
+        "group_id": group_id.lstrip("-"),
+        "access_token": token,
+        "v": API_VERSION,
+    }
+    async with session.get(
+        "https://api.vk.com/method/photos.getWallUploadServer", params=params
+    ) as response:
+        data = await response.json(content_type=None)
+    if "error" in data:
+        raise RuntimeError("ВК загрузка: %s" % data["error"].get("error_msg"))
+    upload_url = data["response"]["upload_url"]
+
+    form = aiohttp.FormData()
+    with image_path.open("rb") as handle:
+        form.add_field("photo", handle, filename=image_path.name, content_type="image/png")
+        async with session.post(upload_url, data=form) as response:
+            uploaded = await response.json(content_type=None)
+
+    save_params = {
+        "group_id": group_id.lstrip("-"),
+        "server": uploaded.get("server"),
+        "photo": uploaded.get("photo"),
+        "hash": uploaded.get("hash"),
+        "access_token": token,
+        "v": API_VERSION,
+    }
+    async with session.get(
+        "https://api.vk.com/method/photos.saveWallPhoto", params=save_params
+    ) as response:
+        saved = await response.json(content_type=None)
+    if "error" in saved:
+        raise RuntimeError("ВК сохранение фото: %s" % saved["error"].get("error_msg"))
+    photo = saved["response"][0]
+    return "photo%s_%s" % (photo["owner_id"], photo["id"])
+
+
 async def post_to_vk(
     session: aiohttp.ClientSession,
     *,
     token: str,
     group_id: str,
     message: str,
+    attachment: str | None = None,
 ) -> int:
     """Опубликовать запись на стене сообщества. Возвращает id записи."""
     payload = {
@@ -40,6 +91,8 @@ async def post_to_vk(
         "access_token": token,
         "v": API_VERSION,
     }
+    if attachment:
+        payload["attachments"] = attachment
     async with session.post(API_URL, data=payload) as response:
         data = await response.json(content_type=None)
     if "error" in data:
