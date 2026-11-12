@@ -112,7 +112,10 @@ football-analyzer/
 │   ├── tunnel/               ← WireGuard до Telegram: узел за границей, данные в РФ
 │   ├── football-analyzer-stage.service   ← бот (systemd), пока не включён
 │   ├── football-analyzer-sync.service    ← разовый сбор расписания
-│   └── football-analyzer-sync.timer      ← расписание сбора, раз в час
+│   ├── football-analyzer-sync.timer      ← расписание сбора, раз в час
+│   ├── football-analyzer-accuracy.service ← пересборка accuracy.json для лендинга
+│   ├── football-analyzer-accuracy.timer   ← пересборка точности, раз в сутки
+│   └── enable-accuracy-timer.sh           ← включить только таймер точности
 ├── scripts/
 │   ├── cost_guard.py         ← учёт платных операций (план/факт)
 │   ├── check_env.py          ← проверка окружения перед запуском
@@ -148,6 +151,7 @@ football-analyzer/
 | Код | `/var/www/football-analyzer-stage` (git, ветка `main`) |
 | Секреты | `/etc/football-analyzer/stage.env` (640 `root:football`) |
 | Сбор расписания | systemd-таймер `football-analyzer-sync.timer`, раз в час |
+| Публичная точность | `football-analyzer-accuracy.timer`, ежедневно 01:15 UTC → пересобирает `docs/landing/accuracy.json`; до него файл обновлялся руками и застыл на 07.11.2026 |
 | Бот | unit установлен, **не включён**: токен есть, но Telegram с сервера недоступен |
 | Firewall | ufw: наружу открыт **только 22/tcp** |
 | SSH | только по ключу; вход по паролю и root-пароль отключены (`00-football.conf`) |

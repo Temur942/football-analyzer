@@ -1,0 +1,41 @@
+# =============================================================================
+# football-analyzer — пересборка публичной точности (accuracy.json).
+#
+# Лендинг читает docs/landing/accuracy.json из браузера, то есть файл лежит
+# статикой и сам не обновляется. До появления этого юнита его пересобирали
+# руками через scripts/build_landing.py, и дата внутри застыла на 07.11.2026 —
+# при том что «публичная точность» заявлена главным отличием от конкурентов.
+#
+# Юнит только считает цифры по базе: запросов наружу нет, платных вызовов нет,
+# сборка лендинга не перезапускается (index.html цифры не содержит — он их
+# подтягивает из JSON).
+#
+# Ручной запуск:
+#   systemctl start football-analyzer-accuracy
+#   journalctl -u football-analyzer-accuracy -n 30 --no-pager
+# Проверка результата:
+#   curl -s https://footballinho.ru/accuracy.json | head -c 300
+# =============================================================================
+
+[Unit]
+Description=football-analyzer: пересборка accuracy.json для лендинга
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=football
+Group=football
+WorkingDirectory=/var/www/football-analyzer-stage
+EnvironmentFile=/etc/football-analyzer/stage.env
+Environment=APP_ENV=stage
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/var/www/football-analyzer-stage/.venv/bin/python -m football_analyzer.cli accuracy --days 30 --json docs/landing/accuracy.json
+TimeoutStartSec=300
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+# Единственный каталог, куда юниту разрешено писать.
+ReadWritePaths=/var/www/football-analyzer-stage/docs/landing

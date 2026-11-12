@@ -1,0 +1,25 @@
+# =============================================================================
+# football-analyzer — ежедневная пересборка accuracy.json.
+#
+# 01:15 UTC = 04:15 МСК = 06:15 Екатеринбург: до начала дня цифры уже свежие,
+# а ночная нагрузка на базу минимальна. Persistent=true — если сервер был
+# выключен в этот момент, пересборка выполнится при загрузке, а не пропустится.
+#
+# Включение:
+#   systemctl daemon-reload
+#   systemctl enable --now football-analyzer-accuracy.timer
+# Состояние:
+#   systemctl list-timers football-analyzer-accuracy.timer
+# =============================================================================
+
+[Unit]
+Description=football-analyzer: пересборка accuracy.json раз в сутки
+
+[Timer]
+OnCalendar=*-*-* 01:15:00 UTC
+AccuracySec=1min
+Persistent=true
+Unit=football-analyzer-accuracy.service
+
+[Install]
+WantedBy=timers.target

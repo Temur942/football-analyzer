@@ -202,18 +202,22 @@ install_unit "$APP_DIR/deploy/football-analyzer-sync.service" "football-analyzer
 install_unit "$APP_DIR/deploy/football-analyzer-sync.timer" "football-analyzer-sync${suffix}.timer"
 install_unit "$APP_DIR/deploy/football-analyzer-deliver.service" "football-analyzer-deliver${suffix}.service"
 install_unit "$APP_DIR/deploy/football-analyzer-deliver.timer" "football-analyzer-deliver${suffix}.timer"
+install_unit "$APP_DIR/deploy/football-analyzer-accuracy.service" "football-analyzer-accuracy${suffix}.service"
+install_unit "$APP_DIR/deploy/football-analyzer-accuracy.timer" "football-analyzer-accuracy${suffix}.timer"
 
 # Таймеры должны запускать свои же сервисы (иначе прод запустит стейдж).
 for unit in /etc/systemd/system/football-analyzer-*${suffix}.timer; do
   sed -i "s#football-analyzer-sync.service#football-analyzer-sync${suffix}.service#g" "$unit"
   sed -i "s#football-analyzer-deliver.service#football-analyzer-deliver${suffix}.service#g" "$unit"
+  sed -i "s#football-analyzer-accuracy.service#football-analyzer-accuracy${suffix}.service#g" "$unit"
 done
 
 systemctl daemon-reload
-# Сбор расписания и рассылка не требуют токена — включаем сразу.
+# Сбор расписания, рассылка и пересборка точности не требуют токена — включаем сразу.
 systemctl enable --now "football-analyzer-sync${suffix}.timer" >/dev/null
 systemctl enable --now "football-analyzer-deliver${suffix}.timer" >/dev/null
-echo "таймеры ${APP_ENV_NAME} включены (расписание, рассылка)"
+systemctl enable --now "football-analyzer-accuracy${suffix}.timer" >/dev/null
+echo "таймеры ${APP_ENV_NAME} включены (расписание, рассылка, точность)"
 echo "unit бота установлен (не включён: нужен доступ к Telegram)"
 
 log "9/10 доступ: только по ключу"
