@@ -140,21 +140,33 @@
 </footer>
 
 <script>
-fetch('accuracy.json').then(r => r.json()).then(data => {
+function accuracyFailed() {
   const tbody = document.querySelector('#accuracy-table tbody');
-  const rows = Object.entries(data.markets || {});
-  if (!rows.length) { return; }
-  tbody.innerHTML = rows.map(([name, v]) =>
-    `<tr><td>${name}</td><td>${v.n}</td><td>${v.hits}</td><td>${(v.rate * 100).toFixed(1)}%</td></tr>`
-  ).join('');
-  const confident = data.confident && data.confident['исход'];
-  if (confident) {
-    tbody.insertAdjacentHTML('beforeend',
-      `<tr><td><strong>исход (уверенные)</strong></td><td>${confident.n}</td><td>${confident.hits}</td><td><strong>${(confident.rate * 100).toFixed(1)}%</strong></td></tr>`);
-  }
-  document.querySelector('#accuracy-window').textContent =
-    `Окно: ${data.window_days} дней. Обновлено: ${new Date(data.generated_at).toLocaleString('ru-RU')}.`;
-}).catch(() => {});
+  tbody.innerHTML = '<tr><td colspan="4">Не удалось загрузить данные о точности. ' +
+    'Цифры обновляются раз в сутки; если сообщение не исчезло — напишите нам.</td></tr>';
+  document.querySelector('#accuracy-window').textContent = '';
+}
+
+fetch('accuracy.json')
+  .then(r => { if (!r.ok) { throw new Error('HTTP ' + r.status); } return r.json(); })
+  .then(data => {
+    const tbody = document.querySelector('#accuracy-table tbody');
+    const rows = Object.entries(data.markets || {});
+    if (!rows.length) { accuracyFailed(); return; }
+    tbody.innerHTML = rows.map(([name, v]) =>
+      `<tr><td>${name}</td><td>${v.n}</td><td>${v.hits}</td><td>${(v.rate * 100).toFixed(1)}%</td></tr>`
+    ).join('');
+    const confident = data.confident && data.confident['исход'];
+    if (confident) {
+      tbody.insertAdjacentHTML('beforeend',
+        `<tr><td><strong>исход (уверенные)</strong></td><td>${confident.n}</td><td>${confident.hits}</td><td><strong>${(confident.rate * 100).toFixed(1)}%</strong></td></tr>`);
+    }
+    const updated = new Date(data.generated_at);
+    const ageDays = (Date.now() - updated.getTime()) / 86400000;
+    const stale = ageDays > 3 ? ' Данные устарели — пересчёт возобновится автоматически.' : '';
+    document.querySelector('#accuracy-window').textContent =
+      `Окно: ${data.window_days} дней. Обновлено: ${updated.toLocaleString('ru-RU')}.${stale}`;
+  }).catch(accuracyFailed);
 </script>
 </body>
 </html>
