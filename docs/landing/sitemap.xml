@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>/</loc></url>
-  <url><loc>/prices.html</loc></url>
-  <url><loc>/thanks.html</loc></url>
-  <url><loc>/offer.html</loc></url>
-  <url><loc>/terms.html</loc></url>
-  <url><loc>/privacy.html</loc></url>
+  <url><loc>https://footballinho.ru/</loc></url>
+  <url><loc>https://footballinho.ru/prices.html</loc></url>
+  <url><loc>https://footballinho.ru/offer.html</loc></url>
+  <url><loc>https://footballinho.ru/terms.html</loc></url>
+  <url><loc>https://footballinho.ru/privacy.html</loc></url>
+  <url><loc>https://footballinho.ru/blog/</loc></url>
+  <url><loc>https://footballinho.ru/blog/total-25.html</loc></url>
+  <url><loc>https://footballinho.ru/blog/poisson-model.html</loc></url>
+  <url><loc>https://footballinho.ru/blog/corners-cards.html</loc></url>
 </urlset>

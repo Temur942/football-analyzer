@@ -65,9 +65,27 @@ def load_posts(directory: Path) -> list[Post]:
     return sorted(posts, key=lambda post: (post.date, post.slug), reverse=True)
 
 
+LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+BOLD = re.compile(r"\*\*(.+?)\*\*")
+SAFE_HREF = re.compile(r"^(https?://|/|#|[\w.-]+\.html$|[\w-]+/$)")
+
+
+def _link(match: re.Match[str]) -> str:
+    """[текст](адрес) — но только для внутренних страниц и http(s).
+
+    Внутренние ссылки между статьями и на лендинг нужны для поиска: без них
+    статья остаётся островом, на который не ведёт ни одна страница.
+    """
+    text, href = match.group(1), match.group(2).replace('"', "%22")
+    if not SAFE_HREF.match(href):
+        return match.group(0)
+    return '<a href="%s">%s</a>' % (href, text)
+
+
 def inline(text: str) -> str:
     text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    return re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", text)
+    text = LINK.sub(_link, text)
+    return BOLD.sub(r"<strong>\1</strong>", text)
 
 
 def render_body(markdown: str) -> str:
