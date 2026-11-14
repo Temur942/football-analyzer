@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from football_analyzer.analysis.bridge import build_cross_model
 from football_analyzer.analysis.forecast import build_forecast
 from football_analyzer.analysis.service import CUP_PREFIXES
+from football_analyzer.cli import to_match_row
 from football_analyzer.storage import db
 
 CUTOFF = datetime(2026, 6, 1, tzinfo=UTC)
@@ -154,7 +155,7 @@ async def main() -> None:
 
 def db_row_to_match(row, competition_id: str) -> dict:
     return {
-        "raw": row,
+        "raw": to_match_row(row),
         "competition": competition_id,
         "date": row["kickoff_utc"].date(),
         "home": row["home_team"],
