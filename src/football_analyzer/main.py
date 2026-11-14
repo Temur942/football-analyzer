@@ -26,12 +26,12 @@ from football_analyzer.config import get_settings
 from football_analyzer.payments.yookassa import fetch_payment
 from football_analyzer.scheduler.delivery import deliver_due
 from football_analyzer.scheduler.digest import send_digest
-from football_analyzer.scheduler.value_picks import send_value_picks
 from football_analyzer.scheduler.publisher import (
     accuracy_post,
     build_forecast_post,
     publish_next,
 )
+from football_analyzer.scheduler.value_picks import send_value_picks
 from football_analyzer.social.vk import post_to_vk, upload_wall_photo
 from football_analyzer.storage import db
 
