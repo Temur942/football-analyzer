@@ -42,6 +42,7 @@ HEAD = """<!doctype html>
   <a class="brand" href="/">⚽ Football Analyzer</a>
   <nav>
     <a href="/blog/">Статьи</a>
+    <a href="/about.html">О сервисе</a>
     <a href="/#prices">Тарифы</a>
     <a class="cta" href="{bot}">Открыть бота</a>
   </nav>
@@ -83,6 +84,7 @@ INDEX_HEAD = """<!doctype html>
 <header class="nav">
   <a class="brand" href="/">⚽ Football Analyzer</a>
   <nav>
+    <a href="/about.html">О сервисе</a>
     <a href="/#prices">Тарифы</a>
     <a class="cta" href="{bot}">Открыть бота</a>
   </nav>

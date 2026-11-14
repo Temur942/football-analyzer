@@ -46,6 +46,7 @@ PAGE = """<!doctype html>
   <nav>
     <a href="/match-center/">Матч-центр</a>
     <a href="/blog/">Статьи</a>
+    <a href="/about.html">О сервисе</a>
     <a href="/#prices">Тарифы</a>
     <a class="cta" href="{bot}">Открыть бота</a>
   </nav>
