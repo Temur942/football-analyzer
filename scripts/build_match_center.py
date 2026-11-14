@@ -380,6 +380,9 @@ async def build() -> None:
         "/privacy.html",
         "/blog/",
         "/match-center/",
+        "/predictions/premier-league/",
+        "/guide/corners/",
+        "/guide/probabilities/",
     ]
     blog_dir = OUT / "blog"
     if blog_dir.is_dir():
