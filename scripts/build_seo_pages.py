@@ -5,6 +5,9 @@
 «прогнозы на АПЛ». Уникальный текст + живые цифры по ближайшим матчам.
 """
 
+# HTML-страницы: длинные строки намеренно.
+# ruff: noqa: E501
+
 from __future__ import annotations
 
 import asyncio
