@@ -38,31 +38,32 @@ async def main() -> None:
         )
     await pool.close()
 
-    matches = [to_match_row(row) for row in rows]
+    matches = [(row["competition_id"], to_match_row(row)) for row in rows]
     if len(matches) < 200:
         print("мало матчей с xG:", len(matches))
         return
 
-    split = int(len(matches) * 0.6)
-    train, test = matches[:split], matches[split:]
+    by_league: dict[str, list] = {}
+    for competition_id, match in matches:
+        by_league.setdefault(competition_id, []).append(match)
 
-    with_xg = fit_rates(train)
-    without_xg = fit_rates(
-        [
-            MatchRow(
-                **{
-                    **match.__dict__,
-                    "home_xg": None,
-                    "away_xg": None,
-                }
-            )
-            for match in train
-        ]
-    )
+    rates_xg: dict[str, object] = {}
+    rates_goals: dict[str, object] = {}
+    test_matches: list[tuple[str, MatchRow]] = []
+    for competition_id, league_matches in by_league.items():
+        if len(league_matches) < 60:
+            continue
+        split = int(len(league_matches) * 0.6)
+        train, test = league_matches[:split], league_matches[split:]
+        rates_xg[competition_id] = fit_rates(train)
+        rates_goals[competition_id] = fit_rates(
+            [MatchRow(**{**match.__dict__, "home_xg": None, "away_xg": None}) for match in train]
+        )
+        test_matches.extend((competition_id, match) for match in test)
 
     entries_xg: list[tuple[float, float, float, tuple[float, float, float]]] = []
     entries_goals: list[tuple[float, float, float, tuple[float, float, float]]] = []
-    for match in test:
+    for competition_id, match in test_matches:
         if match.home_goals is None or match.away_goals is None:
             continue
         actual = (
@@ -72,17 +73,19 @@ async def main() -> None:
             if match.home_goals == match.away_goals
             else (0.0, 0.0, 1.0)
         )
-        for rates, bucket in ((with_xg, entries_xg), (without_xg, entries_goals)):
+        for table, bucket in ((rates_xg, entries_xg), (rates_goals, entries_goals)):
+            rates = table.get(competition_id)
+            if rates is None:
+                continue
             forecast = build_forecast(
                 rates,
-                competition_id="all",
                 home_team=match.home_team,
                 away_team=match.away_team,
                 kickoff_utc=match.kickoff_utc,
             )
             bucket.append((forecast.p_home, forecast.p_draw, forecast.p_away, actual))
 
-    print("матчей всего с xG:", len(matches), "| обучение:", len(train), "| проверка:", len(test))
+    print("матчей с xG:", len(matches), "| в проверке:", len(test_matches))
     print("Brier 1X2 с xG:      %.4f" % brier(entries_xg))
     print("Brier 1X2 без xG:    %.4f" % brier(entries_goals))
     print("меньше — лучше")
