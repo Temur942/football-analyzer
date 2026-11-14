@@ -316,7 +316,7 @@ async def finished_matches(
                 """
                 SELECT kickoff_utc, home_team, away_team, home_goals, away_goals,
                        home_goals_ht, away_goals_ht, home_corners, away_corners,
-                       home_yellow, away_yellow, competition_id
+                       home_yellow, away_yellow, competition_id, home_xg, away_xg
                   FROM matches
                  WHERE status = 'finished'
                    AND home_goals IS NOT NULL

@@ -33,6 +33,18 @@ class MatchRow:
     away_corners: int | None = None
     home_yellow: int | None = None
     away_yellow: int | None = None
+    # Ожидаемые голы: устойчивее факта (0 голов при 2.1 xG — обычное дело).
+    home_xg: float | None = None
+    away_xg: float | None = None
+
+    @property
+    def effective_home_goals(self) -> float:
+        """Голы для оценки силы: xG, если источник его дал."""
+        return self.home_xg if self.home_xg is not None else float(self.home_goals)
+
+    @property
+    def effective_away_goals(self) -> float:
+        return self.away_xg if self.away_xg is not None else float(self.away_goals)
 
 
 @dataclass
@@ -121,8 +133,8 @@ def fit_rates(
     weighted = [(_weight(m.kickoff_utc, now, half_life_days), m) for m in matches]
     total_weight = sum(w for w, _ in weighted) or 1.0
 
-    league_home = sum(w * m.home_goals for w, m in weighted) / total_weight
-    league_away = sum(w * m.away_goals for w, m in weighted) / total_weight
+    league_home = sum(w * m.effective_home_goals for w, m in weighted) / total_weight
+    league_away = sum(w * m.effective_away_goals for w, m in weighted) / total_weight
 
     rates = Rates(
         league_home_goals=max(league_home, 0.05),
@@ -153,16 +165,16 @@ def fit_rates(
         bucket(
             goals,
             match.home_team,
-            weight * match.home_goals,
-            weight * match.away_goals,
+            weight * match.effective_home_goals,
+            weight * match.effective_away_goals,
             weight * league_home,
             weight * league_away,
         )
         bucket(
             goals,
             match.away_team,
-            weight * match.away_goals,
-            weight * match.home_goals,
+            weight * match.effective_away_goals,
+            weight * match.effective_home_goals,
             weight * league_away,
             weight * league_home,
         )

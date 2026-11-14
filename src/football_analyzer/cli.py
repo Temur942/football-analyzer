@@ -379,6 +379,14 @@ def cmd_sync_stats(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def _optional(row: object, key: str) -> float | None:
+    """Необязательное поле: старые запросы могут его не выбирать."""
+    try:
+        return row[key]  # type: ignore[index]
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
 def to_match_row(row: object) -> MatchRow:
     return MatchRow(
         kickoff_utc=row["kickoff_utc"],  # type: ignore[index]
@@ -392,6 +400,8 @@ def to_match_row(row: object) -> MatchRow:
         away_corners=row["away_corners"],  # type: ignore[index]
         home_yellow=row["home_yellow"],  # type: ignore[index]
         away_yellow=row["away_yellow"],  # type: ignore[index]
+        home_xg=_optional(row, "home_xg"),
+        away_xg=_optional(row, "away_xg"),
     )
 
 
