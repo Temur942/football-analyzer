@@ -79,6 +79,7 @@ async def main() -> None:
                 continue
             forecast = build_forecast(
                 rates,
+                competition_id=competition_id,
                 home_team=match.home_team,
                 away_team=match.away_team,
                 kickoff_utc=match.kickoff_utc,
