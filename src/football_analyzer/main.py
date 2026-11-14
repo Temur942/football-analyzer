@@ -447,7 +447,8 @@ async def main() -> None:
                     session,
                     token=settings.vk_token,
                     group_id=settings.vk_group_id,
-                    message=text,
+                    message=text
+                    + "\n\nСайт: https://footballinho.ru/?utm_source=vk&utm_medium=group",
                     attachment=attachment,
                 )
             await db.mark_vk_posted(pool, row["id"])

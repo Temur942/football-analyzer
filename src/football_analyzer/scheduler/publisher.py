@@ -177,8 +177,12 @@ async def publish_next(bot: object, pool: asyncpg.Pool, channel_id: str) -> bool
     bot_url = "https://t.me/footballizator_bot"
     if card_data is not None:
         bot_url += "?start=match_%d" % card_data["match_id"]
+    site_url = "https://footballinho.ru/?utm_source=telegram&utm_medium=channel&utm_campaign=post"
     keyboard = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text="Открыть бота", url=bot_url)]]
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Открыть бота", url=bot_url)],
+            [InlineKeyboardButton(text="Все прогнозы на сайте", url=site_url)],
+        ]
     )
     if card_data is not None:
         # Карточка с цифрами: в ленте заметнее, чем текст.
