@@ -382,9 +382,11 @@ def cmd_sync_stats(args: argparse.Namespace) -> int:
 def _optional(row: object, key: str) -> float | None:
     """Необязательное поле: старые запросы могут его не выбирать."""
     try:
-        return row[key]  # type: ignore[index]
+        value = row[key]  # type: ignore[index]
     except (KeyError, IndexError, TypeError):
         return None
+    # NUMERIC из базы приходит как Decimal — приводим к float для расчётов.
+    return float(value) if value is not None else None
 
 
 def to_match_row(row: object) -> MatchRow:
