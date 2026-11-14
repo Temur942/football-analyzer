@@ -17,7 +17,20 @@ THRESHOLD = 0.82
 
 
 def similarity(first: str, second: str) -> float:
-    return difflib.SequenceMatcher(None, normalize(first), normalize(second)).ratio()
+    left, right = normalize(first), normalize(second)
+    if left == right:
+        return 1.0
+    # Одно название — часть другого («Celtic» ⊂ «Celtic Glasgow»).
+    left_tokens, right_tokens = set(left.split()), set(right.split())
+    if left_tokens and right_tokens:
+        shorter, longer = (
+            (left_tokens, right_tokens)
+            if len(left_tokens) <= len(right_tokens)
+            else (right_tokens, left_tokens)
+        )
+        if shorter <= longer and len(" ".join(shorter)) >= 4:
+            return 0.92
+    return difflib.SequenceMatcher(None, left, right).ratio()
 
 
 async def main() -> None:
