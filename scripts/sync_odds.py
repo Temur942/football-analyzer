@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import datetime
 import io
 import os
 
@@ -48,7 +49,7 @@ def parse_row(row: dict[str, str], competition: str, season: str) -> tuple | Non
     if not date:
         return None
     day, month, year = date.split("/")
-    iso_date = "%s-%s-%s" % (year, month, day)
+    iso_date = datetime.date(int(year), int(month), int(day))
     return (
         competition,
         season,
