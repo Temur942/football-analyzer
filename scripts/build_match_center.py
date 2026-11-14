@@ -307,7 +307,13 @@ async def build() -> None:
 </div>
 <table><thead><tr><th>Время</th><th>Соревнование</th><th>Матч</th>
 <th>Тотал</th><th>Углы</th><th>ЖК</th></tr></thead>
-<tbody id="rows">%s</tbody></table>%s""" % (options, "".join(all_rows), FILTER_JS)
+<tbody id="rows">%s</tbody></table>%s
+<div class="card" style="margin-top:24px">
+  <h3>Разобраться в цифрах</h3>
+  <p><a href="/guide/probabilities/">Как читать вероятности</a> ·
+     <a href="/guide/corners/">Как считаются углы</a> ·
+     <a href="/predictions/premier-league/">Прогнозы на АПЛ</a></p>
+</div>""" % (options, "".join(all_rows), FILTER_JS)
 
     (OUT / "match-center" / "index.html").write_text(
         PAGE.format(
