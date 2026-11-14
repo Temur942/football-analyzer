@@ -26,6 +26,7 @@ from football_analyzer.config import get_settings
 from football_analyzer.payments.yookassa import fetch_payment
 from football_analyzer.scheduler.delivery import deliver_due
 from football_analyzer.scheduler.digest import send_digest
+from football_analyzer.scheduler.value_picks import send_value_picks
 from football_analyzer.scheduler.publisher import (
     accuracy_post,
     build_forecast_post,
@@ -178,6 +179,21 @@ async def main() -> None:
                     continue
 
     scheduler.add_job(send_due_forecasts, "interval", minutes=10, id="deliver")
+
+    async def send_value_picks_to_admins() -> None:
+        """Админам — выжимка по линиям с коэффициентом 1,7+ (оценка модели)."""
+        if pool is None or not settings.admin_ids:
+            return
+        try:
+            sent = await send_value_picks(
+                bot, pool, lead_hours=settings.forecast_lead_hours, recipients=settings.admin_ids
+            )
+            if sent:
+                log.info("выжимка 1,7+: отправлено %d", sent)
+        except Exception as exc:  # noqa: BLE001
+            log.error("выжимка 1,7+ не удалась: %s", exc)
+
+    scheduler.add_job(send_value_picks_to_admins, "interval", minutes=10, id="value_picks")
 
     async def poll_payments() -> None:
         """Дожать статусы незакрытых платежей. Оплата не должна теряться."""

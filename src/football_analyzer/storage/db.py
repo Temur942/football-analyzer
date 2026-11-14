@@ -1041,3 +1041,25 @@ async def mark_vk_posted(pool: asyncpg.Pool, post_id: int) -> None:
         await conn.execute(
             "UPDATE channel_posts SET vk_published_at = now() WHERE id = $1", post_id
         )
+
+
+async def value_alerts_for(pool: asyncpg.Pool, chat_id: int, match_ids: list[int]) -> set[int]:
+    """По каким матчам выжимка уже отправлена."""
+    if not match_ids:
+        return set()
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT match_id FROM value_alerts WHERE chat_id = $1 AND match_id = ANY($2::bigint[])",
+            chat_id,
+            match_ids,
+        )
+    return {int(row["match_id"]) for row in rows}
+
+
+async def mark_value_alert(pool: asyncpg.Pool, match_id: int, chat_id: int) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO value_alerts (match_id, chat_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            match_id,
+            chat_id,
+        )
