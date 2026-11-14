@@ -373,6 +373,7 @@ async def build() -> None:
     urls = [
         "/",
         "/prices.html",
+        "/about.html",
         "/offer.html",
         "/terms.html",
         "/privacy.html",
