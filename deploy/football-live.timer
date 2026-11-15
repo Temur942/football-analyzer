@@ -1,0 +1,10 @@
+[Unit]
+Description=[stage] live-табло: обновление раз в минуту
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=60s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

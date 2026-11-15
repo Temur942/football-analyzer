@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live: счёт футбольных матчей онлайн | Football Analyzer</title>
+<meta name="description" content="Счёт футбольных матчей в реальном времени: идущие матчи, минута, голы. Обновляется каждую минуту. 18+">
+<meta name="yandex-verification" content="2d7c2dde8b71028d">
+<link rel="canonical" href="https://footballinho.ru/live/">
+<link rel="stylesheet" href="/fonts/onest.css">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .live-card {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--glass);
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    transition: border-color .3s, box-shadow .3s;
+  }
+  .live-card.is-live { border-color: rgba(16, 185, 129, .45); }
+  .live-card.goal { animation: goalFlash 1.6s ease; }
+  @keyframes goalFlash {
+    0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, .55); }
+    50% { box-shadow: 0 0 26px 6px rgba(245, 158, 11, .35); }
+    100% { box-shadow: none; }
+  }
+  .live-row { display: flex; align-items: center; gap: 14px; }
+  .live-teams { flex: 1; font-weight: 600; }
+  .live-score {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    font-size: 20px;
+    min-width: 64px;
+    text-align: center;
+  }
+  .live-status { color: var(--muted); font-size: 12px; min-width: 96px; text-align: right; }
+  .live-status.live { color: var(--green); }
+  .live-status.live::before {
+    content: "";
+    display: inline-block;
+    width: 7px; height: 7px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse 1.4s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+  .live-comp { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .goal-banner {
+    display: none;
+    margin: 6px 0 14px;
+    padding: 10px 14px;
+    border-radius: 10px;
+    background: rgba(245, 158, 11, .14);
+    border: 1px solid rgba(245, 158, 11, .4);
+    color: var(--amber, #f59e0b);
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+<header class="nav">
+  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <nav>
+    <a href="/line/">Беттинг-центр</a>
+    <a href="/live/">Live</a>
+    <a href="/match-center/">Матч-центр</a>
+    <a href="/blog/">Статьи</a>
+    <a class="cta" href="https://t.me/footballizator_bot?start=ch_site">Открыть бота</a>
+  </nav>
+</header>
+<main>
+  <h1>Live: счёт матчей</h1>
+  <p class="muted">Обновляется автоматически каждые 30 секунд. Данные: ESPN.</p>
+  <div class="goal-banner" id="goal-banner"></div>
+  <div id="live"></div>
+  <p class="muted" id="updated"></p>
+</main>
+<footer>
+  <p>18+. Материалы — аналитика и вероятности, а не призыв к ставкам.</p>
+  <p>Самозанятый Хидиров Темур Орифжонович · ИНН 021904477296 · khidrov@yandex.ru</p>
+  <p><a href="https://t.me/footballinho_ru">Канал в Telegram</a></p>
+</footer>
+<script>
+let previous = {};
+let bannerTimer = null;
+
+function esc(value) {
+  return String(value == null ? '' : value).replace(/[&<>"]/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'
+  }[ch]));
+}
+
+function render(data) {
+  const matches = data.matches || [];
+  const groups = { in: [], pre: [], post: [] };
+  matches.forEach(match => (groups[match.state] || groups.pre).push(match));
+
+  const goals = [];
+  Object.values(groups).flat().forEach(match => {
+    const key = match.id;
+    const current = (match.home_score || '0') + ':' + (match.away_score || '0');
+    if (match.state === 'in' && previous[key] && previous[key] !== current) {
+      goals.push(match);
+    }
+    previous[key] = current;
+  });
+
+  const banner = document.getElementById('goal-banner');
+  if (goals.length) {
+    banner.style.display = 'block';
+    banner.textContent = '⚽ ГОЛ! ' + goals.map(m =>
+      m.home + ' ' + m.home_score + ':' + m.away_score + ' ' + m.away + ' (' + m.label + ')'
+    ).join(' · ');
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => { banner.style.display = 'none'; }, 20000);
+  }
+
+  const block = (title, list, liveSection) => {
+    if (!list.length) return '';
+    return '<h2 class="section-title">' + title + '</h2>' + list.map(match => {
+      const isLive = match.state === 'in';
+      const isGoal = goals.some(goal => goal.id === match.id);
+      return '<div class="live-card' + (isLive ? ' is-live' : '') + (isGoal ? ' goal' : '') + '">' +
+        '<div class="live-row">' +
+        '<div class="live-teams">' + esc(match.home) + ' <span style="color:var(--muted)">—</span> ' + esc(match.away) + '</div>' +
+        '<div class="live-score">' + esc(match.home_score || '0') + ' : ' + esc(match.away_score || '0') + '</div>' +
+        '<div class="live-status' + (isLive ? ' live' : '') + '">' + esc(match.label) + '</div>' +
+        '</div>' +
+        '<div class="live-comp">' + esc(match.competition) + '</div>' +
+        '</div>';
+    }).join('');
+  };
+
+  document.getElementById('live').innerHTML =
+    block('Идут сейчас', groups.in, true) +
+    block('Ближайшие', groups.pre.slice(0, 25), false) +
+    block('Завершённые', groups.post.slice(0, 15), false);
+
+  document.getElementById('updated').textContent =
+    'Обновлено: ' + new Date(data.generated_at).toLocaleTimeString('ru-RU');
+}
+
+async function load() {
+  try {
+    const response = await fetch('/live.json?' + Date.now());
+    if (response.ok) render(await response.json());
+  } catch (error) {
+    document.getElementById('updated').textContent = 'Не удалось обновить — попробуем снова';
+  }
+}
+
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>

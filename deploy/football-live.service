@@ -1,0 +1,21 @@
+# =============================================================================
+# football-analyzer — обновление live.json (счёт и минута матчей).
+#
+# Данные берутся из того же бесплатного ESPN, что и расписание. Запросов
+# наружу — по одному на соревнование в минуту, платных вызовов нет.
+# Результат складывается в docs/landing/live.json, страница /live/ его читает.
+# =============================================================================
+
+[Unit]
+Description=[stage] live-табло: счёт матчей
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=football
+Group=football
+WorkingDirectory=/var/www/football-analyzer-stage
+EnvironmentFile=/etc/football-analyzer/stage.env
+Environment=APP_ENV=stage
+ExecStart=/var/www/football-analyzer-stage/.venv/bin/python scripts/sync_live.py
+TimeoutStartSec=120
