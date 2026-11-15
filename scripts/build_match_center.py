@@ -248,6 +248,8 @@ def render_match(match, forecast, competition_name: str) -> str:
         away,
         table,
     )
+    # Комментарии слева: читать могут все, писать — только вошедшие.
+    content = COMMENTS.format(match_id=int(match["id"]), content=content)
     jsonld = json.dumps(
         {
             "@context": "https://schema.org",
