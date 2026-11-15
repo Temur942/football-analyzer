@@ -1,0 +1,26 @@
+# =============================================================================
+# football-analyzer — сервис комментариев (127.0.0.1:8010).
+#
+# Отдельный процесс: падение сайта не роняет доставку прогнозов, а падение
+# бота не убивает комментарии. Наружу смотрит только nginx.
+# =============================================================================
+
+[Unit]
+Description=[stage] комментарии к матчам
+After=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=football
+Group=football
+WorkingDirectory=/var/www/football-analyzer-stage
+EnvironmentFile=/etc/football-analyzer/stage.env
+Environment=APP_ENV=stage
+ExecStart=/var/www/football-analyzer-stage/.venv/bin/python -m football_analyzer.web.comments
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

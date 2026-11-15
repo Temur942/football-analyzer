@@ -326,3 +326,28 @@ footer {
 .matches td { vertical-align: middle; }
 .matches tbody tr { transition: background .15s; }
 .matches tbody tr:hover { background: rgba(16, 185, 129, .06); }
+
+/* Комментарии к матчу: слева на широком экране */
+.match-layout { display: grid; gap: 24px; grid-template-columns: 1fr; align-items: start; }
+@media (min-width: 1100px) {
+  .match-layout { grid-template-columns: 330px 1fr; }
+  .comments-panel { position: sticky; top: 18px; }
+}
+.comments-panel {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--glass);
+  padding: 16px;
+}
+.comments-panel h3 { margin: 0 0 12px; font-size: 18px; }
+.comments-list { max-height: 420px; overflow-y: auto; margin-bottom: 12px; }
+.comment { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.comment-head { font-size: 12px; display: flex; gap: 8px; justify-content: space-between; }
+.comment-body { font-size: 14px; margin-top: 4px; word-break: break-word; }
+.comments-form textarea {
+  width: 100%; min-height: 72px; resize: vertical;
+  background: rgba(255,255,255,.04); color: var(--text);
+  border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px; font: inherit; margin-bottom: 8px;
+}
+.comments-form .button { width: 100%; }

@@ -89,6 +89,93 @@ dateFilter.addEventListener('change', apply);
 """
 
 
+COMMENTS = """
+<div class="match-layout">
+  <aside class="comments-panel" data-subject="match:{match_id}">
+    <h3>Обсуждение</h3>
+    <div class="comments-list" id="comments-list"><p class="muted">Загружаем…</p></div>
+    <div class="comments-auth" id="comments-auth"></div>
+    <form class="comments-form" id="comments-form" hidden>
+      <textarea id="comments-text" maxlength="500" placeholder="Ваш комментарий"></textarea>
+      <button class="button" type="submit">Отправить</button>
+      <p class="muted" id="comments-status"></p>
+    </form>
+  </aside>
+  <div class="match-main">{content}</div>
+</div>
+<script>
+(function () {{
+  var panel = document.querySelector('.comments-panel');
+  var subject = panel.dataset.subject;
+  var list = document.getElementById('comments-list');
+  var form = document.getElementById('comments-form');
+  var auth = document.getElementById('comments-auth');
+  var status = document.getElementById('comments-status');
+
+  function esc(value) {{
+    return String(value == null ? '' : value).replace(/[&<>"]/g, function (ch) {{
+      return {{'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}}[ch];
+    }});
+  }}
+
+  function render(items) {{
+    if (!items.length) {{ list.innerHTML = '<p class="muted">Пока никто не писал.</p>'; return; }}
+    list.innerHTML = items.map(function (item) {{
+      return '<div class="comment"><div class="comment-head"><b>' + esc(item.name) +
+        '</b> <span class="muted">' + new Date(item.at).toLocaleString('ru-RU') + '</span></div>' +
+        '<div class="comment-body">' + esc(item.body) + '</div></div>';
+    }}).join('');
+  }}
+
+  function load() {{
+    fetch('/api/comments?subject=' + encodeURIComponent(subject))
+      .then(function (r) {{ return r.json(); }})
+      .then(function (data) {{ render(data.items || []); }})
+      .catch(function () {{ list.innerHTML = '<p class="muted">Не удалось загрузить</p>'; }});
+  }}
+
+  fetch('/api/me').then(function (r) {{ return r.json(); }}).then(function (data) {{
+    if (data.chat_id) {{
+      form.hidden = false;
+      auth.innerHTML = '<p class="muted">Вы вошли как ' + data.chat_id + '</p>';
+    }} else {{
+      auth.innerHTML = '<p class="muted">Войдите, чтобы комментировать:</p>' +
+        '<script async src="https://telegram.org/js/telegram-widget.js?22" ' +
+        'data-telegram-login="footballizator_bot" data-size="medium" data-radius="8" ' +
+        'data-auth-url="https://footballinho.ru/auth/telegram"><\/script>';
+    }}
+  }});
+
+  form.addEventListener('submit', function (event) {{
+    event.preventDefault();
+    var text = document.getElementById('comments-text').value.trim();
+    if (text.length < 2) return;
+    fetch('/api/comments', {{
+      method: 'POST',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{subject: subject, body: text}})
+    }}).then(function (r) {{
+      return r.json().then(function (data) {{ return {{ok: r.ok, data: data}}; }});
+    }}).then(function (result) {{
+      if (result.ok) {{
+        document.getElementById('comments-text').value = '';
+        status.textContent = 'Отправлено';
+        load();
+      }} else {{
+        status.textContent = result.data.error === 'slow'
+          ? 'Слишком часто: подождите 20 секунд'
+          : 'Не удалось отправить';
+      }}
+    }});
+  }});
+
+  load();
+  setInterval(load, 30000);
+}})();
+</script>
+"""
+
+
 def slugify(value: str) -> str:
     value = value.lower().replace("ё", "е")
     return re.sub(r"[^a-zа-я0-9]+", "-", value).strip("-") or "league"

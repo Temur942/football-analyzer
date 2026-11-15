@@ -107,7 +107,8 @@ async def main() -> None:
                             home_goals, away_goals, odds_home, odds_draw, odds_away,
                             avg_home, avg_draw, avg_away, max_home, max_draw, max_away,
                             over25, under25, home_xg, away_xg
-                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+                        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+                                  $11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
                         ON CONFLICT (competition, match_date, home_team, away_team)
                         DO UPDATE SET home_xg = EXCLUDED.home_xg, away_xg = EXCLUDED.away_xg
                         """,
