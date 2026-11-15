@@ -388,6 +388,8 @@ async def build() -> None:
         "/privacy.html",
         "/blog/",
         "/match-center/",
+        "/line/",
+        "/live/",
         "/predictions/premier-league/",
         "/guide/corners/",
         "/guide/probabilities/",
