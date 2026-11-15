@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -141,6 +142,18 @@ async def deliver_due(
             try:
                 await send(chat_id, text)
             except Exception as exc:  # noqa: BLE001
+                # Telegram ограничивает частоту: если он просит подождать —
+                # ждём ровно столько и повторяем один раз. Иначе при рассылке
+                # на сотни чатов часть сообщений теряется.
+                retry_after = getattr(exc, "retry_after", None)
+                if retry_after:
+                    await asyncio.sleep(float(retry_after) + 0.5)
+                    try:
+                        await send(chat_id, text)
+                    except Exception as second:  # noqa: BLE001
+                        report.failed += 1
+                        log.warning("повтор тоже не удался (%s): %s", chat_id, second)
+                        continue
                 # Важно: запись в журнал НЕ создаём. Иначе ключ (матч, чат)
                 # занят статусом failed, и прогноз не уйдёт уже никогда —
                 # сетевая ошибка превратилась бы в потерянное сообщение.
