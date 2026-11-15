@@ -21,6 +21,7 @@ from football_analyzer.teams_ru import to_russian
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "landing" / "live.json"
 API = "https://site.api.espn.com/apis/site/v2/sports/soccer/%s/scoreboard"
+SUMMARY = "https://site.api.espn.com/apis/site/v2/sports/soccer/%s/summary"
 
 
 def status_label(state: str, detail: str, clock: str | None) -> str:
@@ -43,6 +44,49 @@ async def fetch_day(session: aiohttp.ClientSession, slug: str, day: str) -> list
     return data.get("events", []) or []
 
 
+EVENT_ICONS = {
+    "Goal": "⚽",
+    "Penalty - Scored": "⚽",
+    "Own Goal": "⚽",
+    "Yellow Card": "🟨",
+    "Red Card": "🟥",
+    "Second Yellow Card": "🟥",
+}
+
+
+async def fetch_events(session: aiohttp.ClientSession, slug: str, event_id: str) -> list[dict]:
+    """Голы и карточки матча: кто и на какой минуте."""
+    try:
+        async with session.get(SUMMARY % slug, params={"event": event_id}) as response:
+            if response.status != 200:
+                return []
+            data = await response.json(content_type=None)
+    except Exception:  # noqa: BLE001
+        return []
+
+    result: list[dict] = []
+    for event in data.get("keyEvents") or []:
+        label = (event.get("type") or {}).get("text", "")
+        icon = EVENT_ICONS.get(label)
+        if icon is None:
+            continue
+        athlete = ""
+        participants = event.get("participants") or []
+        if participants:
+            athlete = (participants[0].get("athlete") or {}).get("displayName", "")
+        team = (event.get("team") or {}).get("displayName", "")
+        result.append(
+            {
+                "icon": icon,
+                "type": label,
+                "minute": (event.get("clock") or {}).get("displayValue", ""),
+                "player": athlete,
+                "team": to_russian(team) if team else "",
+            }
+        )
+    return result
+
+
 async def main() -> None:
     competitions = load_competitions()
     today = datetime.now(UTC)
@@ -58,7 +102,8 @@ async def main() -> None:
             if not slug:
                 continue
             for day in days:
-                for event in await fetch_day(session, slug, day):
+                day_events = await fetch_day(session, slug, day)
+                for event in day_events:
                     competition_block = (event.get("competitions") or [{}])[0]
                     status = competition_block.get("status") or {}
                     state = (status.get("type") or {}).get("state", "pre")
@@ -72,9 +117,20 @@ async def main() -> None:
                     away = sides.get("away")
                     if not home or not away:
                         continue
+                    events: list[dict] = []
+                    recent = False
+                    kickoff_text = event.get("date") or ""
+                    try:
+                        kickoff_dt = datetime.fromisoformat(kickoff_text.replace("Z", "+00:00"))
+                        recent = datetime.now(UTC) - kickoff_dt < timedelta(hours=4)
+                    except ValueError:
+                        recent = False
+                    if state == "in" or (state == "post" and recent):
+                        events = await fetch_events(session, slug, str(event.get("id")))
                     matches.append(
                         {
                             "id": event.get("id"),
+                            "events": events,
                             "competition": getattr(competition, "name_ru", slug),
                             "home": to_russian(home["team"]["displayName"]),
                             "away": to_russian(away["team"]["displayName"]),

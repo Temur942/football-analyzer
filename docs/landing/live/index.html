@@ -47,6 +47,13 @@
   }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
   .live-comp { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .live-events { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .live-event {
+    font-size: 12px; color: var(--text);
+    background: rgba(255,255,255,.05);
+    border: 1px solid var(--border);
+    border-radius: 999px; padding: 3px 10px;
+  }
   .goal-banner {
     display: none;
     margin: 6px 0 14px;
@@ -129,6 +136,11 @@ function render(data) {
         '<div class="live-status' + (isLive ? ' live' : '') + '">' + esc(match.label) + '</div>' +
         '</div>' +
         '<div class="live-comp">' + esc(match.competition) + '</div>' +
+        (match.events && match.events.length
+          ? '<div class="live-events">' + match.events.map(ev =>
+              '<span class="live-event">' + esc(ev.icon) + ' ' + esc(ev.minute) +
+              ' ' + esc(ev.player) + '</span>').join('') + '</div>'
+          : '') +
         '</div>';
     }).join('');
   };
