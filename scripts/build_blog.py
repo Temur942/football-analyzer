@@ -29,6 +29,10 @@ HEAD = """<!doctype html>
 <meta property="og:locale" content="ru_RU">
 <meta property="og:site_name" content="Football Analyzer">
 <meta property="og:url" content="{canonical}">
+<meta property="og:image" content="https://footballinho.ru/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{summary}">
 <meta property="article:published_time" content="{date_iso}">

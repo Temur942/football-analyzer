@@ -38,7 +38,7 @@ def main() -> None:
     # Заголовки ставим сразу после server_name
     for index, line in enumerate(out):
         if line.strip().startswith("server_name"):
-            out[index + 1:index + 1] = HEADERS
+            out[index + 1 : index + 1] = HEADERS
             seen_headers = True
             break
 

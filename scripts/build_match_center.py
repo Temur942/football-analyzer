@@ -33,6 +33,10 @@ PAGE = """<!doctype html>
 <title>{title}</title>
 <meta name="description" content="{description}">
 <link rel="canonical" href="{canonical}">
+<meta property="og:image" content="https://footballinho.ru/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{description}">
 <link rel="stylesheet" href="/fonts/onest.css">
@@ -249,6 +253,14 @@ def render_match(match, forecast, competition_name: str) -> str:
         table,
     )
     # Комментарии слева: читать могут все, писать — только вошедшие.
+    share_url = (
+        "https://t.me/share/url?url=https%%3A%%2F%%2Ffootballinho.ru%%2Fmatch%%2F%d%%2F"
+        "&text=%s" % (int(match["id"]), html.escape(title))
+    )
+    content += (
+        '<p><a class="button" href="%s" target="_blank" rel="noopener">Поделиться прогнозом</a></p>'
+        % share_url
+    )
     content = COMMENTS.format(match_id=int(match["id"]), content=content)
     jsonld = json.dumps(
         {

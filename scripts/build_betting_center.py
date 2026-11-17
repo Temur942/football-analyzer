@@ -30,6 +30,10 @@ PAGE = """<!doctype html>
 <title>{title}</title>
 <meta name="description" content="{description}">
 <meta name="yandex-verification" content="2d7c2dde8b71028d">
+<meta property="og:image" content="https://footballinho.ru/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="canonical" href="{canonical}">
 <link rel="stylesheet" href="/fonts/onest.css">
 <link rel="stylesheet" href="/style.css">
