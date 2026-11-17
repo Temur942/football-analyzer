@@ -1063,3 +1063,17 @@ async def mark_value_alert(pool: asyncpg.Pool, match_id: int, chat_id: int) -> N
             match_id,
             chat_id,
         )
+
+
+async def next_text_post(pool: asyncpg.Pool) -> asyncpg.Record | None:
+    """Следующий готовый текстовый пост.
+
+    Нужен как запасной вариант: если первым в очереди стоит прогноз, а матчей
+    в окне нет, канал не должен оставаться без публикации.
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
+            "SELECT id, kind, body FROM channel_posts"
+            " WHERE published_at IS NULL AND kind = 'text' AND body IS NOT NULL"
+            " ORDER BY id LIMIT 1"
+        )

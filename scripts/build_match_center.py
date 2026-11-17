@@ -13,8 +13,8 @@ import html
 import json
 import os
 import re
-from urllib.parse import quote
 from pathlib import Path
+from urllib.parse import quote
 
 from football_analyzer.analysis.forecast import MSK, build_forecast
 from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models

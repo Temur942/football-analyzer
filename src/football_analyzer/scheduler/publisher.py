@@ -169,10 +169,17 @@ async def publish_next(bot: object, pool: asyncpg.Pool, channel_id: str) -> bool
     if row["kind"] == "forecast" or not text:
         built = await build_forecast_post(pool)
         if built is None:
-            log.warning("пост-прогноз не собран: нет матчей")
-            return False
-        text = built["text"]
-        card_data = built
+            # Матчей в окне нет — берём текстовый пост, чтобы канал не молчал.
+            fallback = await db.next_text_post(pool)
+            if fallback is None:
+                log.warning("пост-прогноз не собран, текстовых постов тоже нет")
+                return False
+            log.info("нет матчей — публикуем текстовый пост %s", fallback["id"])
+            text = fallback["body"]
+            row = fallback
+        else:
+            text = built["text"]
+            card_data = built
 
     bot_url = "https://t.me/footballizator_bot"
     if card_data is not None:
