@@ -13,6 +13,7 @@ import html
 import json
 import os
 import re
+from urllib.parse import quote
 from pathlib import Path
 
 from football_analyzer.analysis.forecast import MSK, build_forecast
@@ -253,9 +254,9 @@ def render_match(match, forecast, competition_name: str) -> str:
         table,
     )
     # Комментарии слева: читать могут все, писать — только вошедшие.
-    share_url = (
-        "https://t.me/share/url?url=https%%3A%%2F%%2Ffootballinho.ru%%2Fmatch%%2F%d%%2F"
-        "&text=%s" % (int(match["id"]), html.escape(title))
+    share_url = "https://t.me/share/url?url=%s&text=%s" % (
+        quote("https://footballinho.ru/match/%d/" % int(match["id"]), safe=""),
+        quote(title, safe=""),
     )
     content += (
         '<p><a class="button" href="%s" target="_blank" rel="noopener">Поделиться прогнозом</a></p>'
