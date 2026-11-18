@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Пригласи друга — 7 дней бесплатно | Football Analyzer</title>
+<meta name="description" content="Пригласите друга в Football Analyzer и получите 7 дней подписки бесплатно после его оплаты. Персональная ссылка и статистика приглашений.">
+<meta name="yandex-verification" content="2d7c2dde8b71028d">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:site_name" content="Football Analyzer">
+<meta property="og:title" content="Пригласи друга — 7 дней бесплатно">
+<meta property="og:description" content="Персональная ссылка, статистика приглашений и бонусные дни за оплативших друзей.">
+<meta property="og:image" content="https://footballinho.ru/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://footballinho.ru/invite/">
+<link rel="stylesheet" href="/fonts/onest.css">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="nav">
+  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <nav>
+    <a href="/line/">Беттинг-центр</a>
+    <a href="/live/">Live</a>
+    <a href="/match-center/">Матч-центр</a>
+    <a href="/blog/">Статьи</a>
+    <a class="cta" href="https://t.me/footballizator_bot?start=ch_site">Открыть бота</a>
+  </nav>
+</header>
+
+<main>
+  <h1>Пригласи друга — получи 7 дней</h1>
+  <p class="muted">Бонус начисляется, когда приглашённый оформляет подписку.
+     За пустые аккаунты дней не даём — иначе схему накручивают.</p>
+
+  <div class="card">
+    <h3>Как это работает</h3>
+    <ol>
+      <li>Возьмите свою ссылку ниже (или отправьте боту команду <code>/invite</code>).</li>
+      <li>Друг открывает её и попадает в бота.</li>
+      <li>Когда он оплатит подписку — вам добавится <strong>7 дней</strong>.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h3>Ваша ссылка</h3>
+    <p class="muted">Введите свой Telegram ID — его покажет бот по команде <code>/myid</code>.</p>
+    <div class="filters">
+      <input id="chat-id" type="text" inputmode="numeric" placeholder="Например, 123456789">
+      <button class="button" id="make" type="button">Получить ссылку</button>
+    </div>
+    <div id="result" hidden>
+      <p><input id="link" type="text" readonly style="width:100%"></p>
+      <p>
+        <button class="button" id="copy" type="button">Скопировать</button>
+        <a class="button" id="share" href="#" target="_blank" rel="noopener">Отправить в Telegram</a>
+      </p>
+      <p class="muted" id="status"></p>
+    </div>
+  </div>
+
+  <p class="muted">18+. Сервис не является букмекерской конторой и не принимает ставки.</p>
+</main>
+
+<footer>
+  <p>18+. Материалы — аналитика и вероятности, а не призыв к ставкам.</p>
+  <p>Самозанятый Хидиров Темур Орифжонович · ИНН 021904477296 · khidrov@yandex.ru</p>
+  <p><a href="https://t.me/footballinho_ru">Канал в Telegram</a></p>
+</footer>
+
+<script>
+const idInput = document.getElementById('chat-id');
+const result = document.getElementById('result');
+const linkInput = document.getElementById('link');
+const status = document.getElementById('status');
+
+document.getElementById('make').addEventListener('click', function () {
+  const id = idInput.value.replace(/\D/g, '');
+  if (!id) { status.textContent = 'Введите цифровой ID из команды /myid'; return; }
+  const link = 'https://t.me/footballizator_bot?start=ref_' + id;
+  linkInput.value = link;
+  document.getElementById('share').href =
+    'https://t.me/share/url?url=' + encodeURIComponent(link) +
+    '&text=' + encodeURIComponent('Вероятности футбольных матчей за 5 часов до начала. Попробуй 3 дня бесплатно.');
+  result.hidden = false;
+  status.textContent = '';
+});
+
+document.getElementById('copy').addEventListener('click', async function () {
+  try {
+    await navigator.clipboard.writeText(linkInput.value);
+    status.textContent = 'Ссылка скопирована';
+  } catch (error) {
+    linkInput.select();
+    status.textContent = 'Нажмите Ctrl+C, чтобы скопировать';
+  }
+});
+</script>
+</body>
+</html>

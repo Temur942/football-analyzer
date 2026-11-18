@@ -1077,3 +1077,20 @@ async def next_text_post(pool: asyncpg.Pool) -> asyncpg.Record | None:
             " WHERE published_at IS NULL AND kind = 'text' AND body IS NOT NULL"
             " ORDER BY id LIMIT 1"
         )
+
+
+async def referral_stats(pool: asyncpg.Pool, chat_id: int) -> tuple[int, int, int]:
+    """Сколько приглашено, сколько оплатило и сколько дней бонуса начислено."""
+    async with pool.acquire() as conn:
+        invited = await conn.fetchval(
+            "SELECT count(*) FROM subscribers WHERE referred_by = $1", chat_id
+        )
+        paid = await conn.fetchval(
+            "SELECT count(*) FROM subscribers WHERE referred_by = $1 AND paid_until IS NOT NULL",
+            chat_id,
+        )
+        bonuses = await conn.fetchval(
+            "SELECT count(*) FROM events WHERE chat_id = $1 AND name = 'referral_bonus'",
+            chat_id,
+        )
+    return int(invited or 0), int(paid or 0), int(bonuses or 0) * 7

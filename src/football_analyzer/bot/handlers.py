@@ -569,6 +569,31 @@ async def handle_faq(message: Message, has_access: bool = True) -> None:
     )
 
 
+@router.message(Command("invite"))
+async def handle_invite(message: Message, pool: asyncpg.Pool | None = None) -> None:
+    """Личная ссылка приглашения и статистика по рефералам."""
+    if message.from_user is None or message.bot is None:
+        return
+    if pool is None:
+        await message.answer("Сервис временно недоступен, попробуйте позже.")
+        return
+    me = await message.bot.me()
+    chat_id = message.from_user.id
+    invited, paid, days = await db.referral_stats(pool, chat_id)
+    link = "https://t.me/%s?start=ref_%d" % (me.username, chat_id)
+    text = (
+        "🎁 <b>Пригласи друга</b>\n\n"
+        "За друга, который оформит подписку, вы получаете <b>7 дней</b> бесплатно.\n\n"
+        "Ваша ссылка:\n<code>%s</code>\n\n"
+        "Приглашено: <b>%d</b>\n"
+        "Из них оплатили: <b>%d</b>\n"
+        "Дней бонуса начислено: <b>%d</b>\n\n"
+        "<i>Бонус начисляется только после оплаты приглашённого — "
+        "за пустые аккаунты дней не даём.</i>" % (link, invited, paid, days)
+    )
+    await message.answer(text)
+
+
 @router.message(Command("myid"))
 async def handle_myid(message: Message) -> None:
     """Показать свой Telegram ID — нужен, чтобы выдать доступ."""

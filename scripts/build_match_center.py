@@ -491,6 +491,7 @@ async def build() -> None:
         "/blog/",
         "/match-center/",
         "/line/",
+        "/invite/",
         "/live/",
         "/predictions/premier-league/",
         "/guide/corners/",
