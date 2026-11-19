@@ -35,9 +35,11 @@ TEMPLATE = """<!doctype html>
 <header class="nav">
   <a class="brand" href="/">⚽ Football Analyzer</a>
   <nav>
-    <a href="/#prices">Тарифы</a>
-    <a href="/#accuracy">Точность</a>
-    <a class="cta" href="https://t.me/footballizator_bot">Открыть бота</a>
+    <a href="/line/">Беттинг-центр</a>
+    <a href="/live/">Live</a>
+    <a href="/match-center/">Матч-центр</a>
+    <a href="/blog/">Статьи</a>
+    <a class="cta" href="https://t.me/footballizator_bot?start=ch_site">Открыть бота</a>
   </nav>
 </header>
 <main class="legal">
@@ -48,6 +50,15 @@ TEMPLATE = """<!doctype html>
 <footer>
   <p>18+. Материалы — аналитика и вероятности, а не призыв к ставкам.</p>
   <p>Самозанятый Хидиров Темур Орифжонович · ИНН 021904477296 · khidrov@yandex.ru</p>
+  <p>
+    <a href="/offer.html">Оферта</a> ·
+    <a href="/terms.html">Соглашение</a> ·
+    <a href="/privacy.html">Политика ПД</a> ·
+    <a href="/consent.html">Согласие</a> ·
+    <a href="/rights.html">Права</a> ·
+    <a href="/cookies.html">Cookie</a> ·
+    <a href="#" data-cookie-settings>Настройки cookie</a>
+  </p>
 </footer>
 </body>
 </html>
