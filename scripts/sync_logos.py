@@ -28,7 +28,41 @@ ROOT = Path(__file__).resolve().parent.parent
 LOGO_DIR = ROOT / "docs" / "landing" / "logos"
 MAP_FILE = LOGO_DIR / "teams.json"
 API = "https://site.api.espn.com/apis/site/v2/sports/soccer/%s/scoreboard"
+STANDINGS = "https://site.api.espn.com/apis/v2/sports/soccer/%s/standings"
 CDN = "https://a.espncdn.com/i/teamlogos/soccer/500/%s.png"
+
+
+async def collect_standings(session: aiohttp.ClientSession, slug: str) -> dict[str, dict]:
+    """Все команды турнира из таблицы — там у каждой есть эмблема."""
+    teams: dict[str, dict] = {}
+    try:
+        async with session.get(STANDINGS % slug) as response:
+            if response.status != 200:
+                return {}
+            data = await response.json(content_type=None)
+    except Exception:  # noqa: BLE001
+        return {}
+
+    def walk(node: dict) -> None:
+        for entry in (node.get("standings") or {}).get("entries") or []:
+            team = entry.get("team") or {}
+            name = team.get("displayName")
+            team_id = team.get("id")
+            logos = team.get("logos") or []
+            if name and team_id:
+                teams.setdefault(
+                    name,
+                    {
+                        "id": team_id,
+                        "color": team.get("color"),
+                        "logo": logos[0].get("href") if logos else None,
+                    },
+                )
+        for child in node.get("children") or []:
+            walk(child)
+
+    walk(data)
+    return teams
 
 
 async def collect(session: aiohttp.ClientSession, slug: str) -> dict[str, dict]:
@@ -53,7 +87,11 @@ async def collect(session: aiohttp.ClientSession, slug: str) -> dict[str, dict]:
                     name = team.get("displayName")
                     team_id = team.get("id")
                     if name and team_id:
-                        teams[name] = {"id": team_id, "color": team.get("color")}
+                        teams[name] = {
+                            "id": team_id,
+                            "color": team.get("color"),
+                            "logo": team.get("logo"),
+                        }
     return teams
 
 
@@ -67,7 +105,9 @@ async def main() -> None:
             slug = getattr(competition, "espn", None)
             if not slug:
                 continue
-            teams = await collect(session, slug)
+            teams = await collect_standings(session, slug)
+            if not teams:
+                teams = await collect(session, slug)
             mapping.update(teams)
             print("%-22s команд: %d" % (slug, len(teams)))
 
@@ -78,8 +118,9 @@ async def main() -> None:
                 skipped += 1
                 info["file"] = "/logos/%s.png" % info["id"]
                 continue
+            source = info.get("logo") or (CDN % info["id"])
             try:
-                async with session.get(CDN % info["id"]) as response:
+                async with session.get(source) as response:
                     if response.status != 200:
                         failed += 1
                         continue
