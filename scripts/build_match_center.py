@@ -510,6 +510,9 @@ async def build() -> None:
             if path.name != "index.html"
         ]
     urls += ["/match-center/%s/" % slug for slug in slugs]
+    table_dir = OUT / "table"
+    if table_dir.is_dir():
+        urls += ["/table/%s/" % path.parent.name for path in sorted(table_dir.glob("*/index.html"))]
     urls += ["/match/%d/" % match["id"] for match, _ in prepared]
     sitemap = [
         '<?xml version="1.0" encoding="UTF-8"?>',
