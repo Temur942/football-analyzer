@@ -512,6 +512,15 @@ async def build() -> None:
             if path.name != "index.html"
         ]
     urls += ["/match-center/%s/" % slug for slug in slugs]
+    guide_dir = OUT / "guide"
+    if guide_dir.is_dir():
+        fixed = {"corners", "probabilities"}
+        urls += [
+            "/guide/%s/" % path.parent.name
+            for path in sorted(guide_dir.glob("*/index.html"))
+            if path.parent.name not in fixed
+        ]
+        urls.append("/guide/")
     results_dir = OUT / "results"
     if results_dir.is_dir():
         urls += [
