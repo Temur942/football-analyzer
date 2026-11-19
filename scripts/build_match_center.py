@@ -420,7 +420,8 @@ async def build() -> None:
   <h3>Разобраться в цифрах</h3>
   <p><a href="/guide/probabilities/">Как читать вероятности</a> ·
      <a href="/guide/corners/">Как считаются углы</a> ·
-     <a href="/predictions/premier-league/">Прогнозы на АПЛ</a></p>
+     <a href="/predictions/premier-league/">Прогнозы на АПЛ</a> ·
+     <a href="/guide/">Все разборы</a></p>
 </div>""" % (options, "".join(all_rows), FILTER_JS)
 
     (OUT / "match-center" / "index.html").write_text(
