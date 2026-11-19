@@ -52,6 +52,7 @@ PAGE = """<!doctype html>
     <a href="/line/">Беттинг-центр</a>
     <a href="/live/">Live</a>
     <a href="/schedule/">Расписание</a>
+    <a href="/results/">Результаты</a>
     <a href="/table/">Таблицы</a>
     <a href="/match-center/">Матч-центр</a>
     <a href="/blog/">Статьи</a>
@@ -511,6 +512,11 @@ async def build() -> None:
             if path.name != "index.html"
         ]
     urls += ["/match-center/%s/" % slug for slug in slugs]
+    results_dir = OUT / "results"
+    if results_dir.is_dir():
+        urls += [
+            "/results/%s/" % path.parent.name for path in sorted(results_dir.glob("*/index.html"))
+        ]
     schedule_dir = OUT / "schedule"
     if schedule_dir.is_dir():
         urls += [

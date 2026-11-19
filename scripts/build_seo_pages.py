@@ -49,6 +49,7 @@ PAGE = """<!doctype html>
     <a href="/line/">Беттинг-центр</a>
     <a href="/live/">Live</a>
     <a href="/schedule/">Расписание</a>
+    <a href="/results/">Результаты</a>
     <a href="/table/">Таблицы</a>
     <a href="/match-center/">Матч-центр</a>
     <a href="/blog/">Статьи</a>
