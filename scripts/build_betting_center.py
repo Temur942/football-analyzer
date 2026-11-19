@@ -15,6 +15,7 @@ from pathlib import Path
 from football_analyzer.analysis.forecast import MSK, build_forecast
 from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models
 from football_analyzer.storage import db
+from football_analyzer.team_logos import team_html
 from football_analyzer.teams_ru import to_russian
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -137,8 +138,8 @@ async def build() -> None:
                 % (
                     kickoff.strftime("%d.%m %H:%M"),
                     match["id"],
-                    html.escape(to_russian(match["home_team"])),
-                    html.escape(to_russian(match["away_team"])),
+                    team_html(match["home_team"]),
+                    team_html(match["away_team"]),
                     forecast.p_home * 100,
                     forecast.p_draw * 100,
                     forecast.p_away * 100,
