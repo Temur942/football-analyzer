@@ -468,3 +468,62 @@ body:has(.fa-cookie:not([hidden])) { padding-bottom: 120px; }
 
 /* Заголовок матча с эмблемами переносится аккуратно */
 .match-hero { gap: 10px; font-size: clamp(22px, 4vw, 34px); line-height: 1.2; }
+
+/* ===== Анимация гола на поле в шапке ===== */
+.pitch-goal {
+  position: absolute;
+  top: 50%;
+  width: 26px;
+  height: 74px;
+  margin-top: -37px;
+  border: 2px solid rgba(237, 230, 218, .5);
+  background:
+    repeating-linear-gradient(90deg, rgba(237, 230, 218, .18) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(0deg, rgba(237, 230, 218, .18) 0 1px, transparent 1px 5px);
+  border-radius: 2px;
+}
+.pitch-goal-left { left: 16px; }
+.pitch-goal-right { right: 16px; }
+
+/* Мяч летит к правым воротам, затем возвращается в центр */
+.hero-visual .pitch-ball {
+  animation: ballShoot 6s cubic-bezier(.45, .05, .55, .95) infinite;
+}
+@keyframes ballShoot {
+  0%, 10%   { left: 50%; top: 50%; opacity: 1; }
+  40%       { left: 80%; top: 48%; opacity: 1; }
+  50%       { left: 91%; top: 47%; opacity: 1; }
+  56%       { left: 94%; top: 46%; opacity: 0; }
+  57%       { left: 50%; top: 50%; opacity: 0; }
+  66%, 100% { left: 50%; top: 50%; opacity: 1; }
+}
+
+/* Надпись появляется после удара */
+.goal-flash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(28px, 6vw, 52px);
+  font-weight: 800;
+  letter-spacing: .06em;
+  color: #fff;
+  text-shadow: 0 0 24px rgba(245, 158, 11, .85), 0 4px 18px rgba(0, 0, 0, .6);
+  opacity: 0;
+  pointer-events: none;
+  animation: goalText 6s ease-in-out infinite;
+}
+@keyframes goalText {
+  0%, 50%   { opacity: 0; transform: scale(.7); }
+  56%       { opacity: 1; transform: scale(1.12); }
+  62%       { opacity: 1; transform: scale(1); }
+  80%       { opacity: .9; transform: scale(1); }
+  88%, 100% { opacity: 0; transform: scale(1.05); }
+}
+
+/* Уважаем настройку «уменьшить движение» */
+@media (prefers-reduced-motion: reduce) {
+  .hero-visual .pitch-ball { animation: none; left: 50%; top: 50%; }
+  .goal-flash { animation: none; opacity: 0; }
+}
