@@ -48,6 +48,10 @@ CALLBACK_BACK = "back"
 def main_menu() -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     builder.button(text="📊 Прогноз на сегодня", callback_data="today")
+    builder.button(
+        text="🌐 Матчи, таблицы, расписание",
+        url="https://footballinho.ru/?utm_source=telegram&utm_medium=bot_menu",
+    )
     builder.button(text="💳 Тарифы и подписка", callback_data=CALLBACK_TARIFFS)
     builder.button(text="ℹ️ Как это работает", callback_data="about")
     builder.button(text="📜 Мои прогнозы", callback_data="my_predictions")

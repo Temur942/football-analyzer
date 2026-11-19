@@ -16,7 +16,6 @@ from football_analyzer.analysis.forecast import MSK, build_forecast
 from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models
 from football_analyzer.storage import db
 from football_analyzer.team_logos import team_html
-from football_analyzer.teams_ru import to_russian
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "landing"
