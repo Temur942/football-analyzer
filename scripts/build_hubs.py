@@ -253,19 +253,19 @@ async def main() -> None:
         '<a href="/results/">Результаты</a> · '
         '<a href="/table/">Все таблицы</a></p>'
     )
-    (OUT / "season" / season_label / "index.html").parent.mkdir(parents=True, exist_ok=True)
-    (OUT / "season" / season_label / "index.html").write_text(
+    (OUT / "season" / latest_season / "index.html").parent.mkdir(parents=True, exist_ok=True)
+    (OUT / "season" / latest_season / "index.html").write_text(
         PAGE.format(
             title="Футбол %s: расписание, таблицы и результаты сезона" % season_label,
             description="Сезон %s в футболе: все турниры, турнирные таблицы, расписание "
             "матчей и результаты. 18+" % season_label,
-            canonical="%s/season/%s/" % (BASE_URL, season_label),
+            canonical="%s/season/%s/" % (BASE_URL, latest_season),
             content=season,
             bot=BOT_URL,
         ),
         encoding="utf-8",
     )
-    print("хабы: /russia/ и /season/%s/" % season_label)
+    print("хабы: /russia/ и /season/%s/" % latest_season)
 
 
 if __name__ == "__main__":
