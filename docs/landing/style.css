@@ -485,17 +485,20 @@ body:has(.fa-cookie:not([hidden])) { padding-bottom: 120px; }
 .pitch-goal-left { left: 16px; }
 .pitch-goal-right { right: 16px; }
 
-/* Мяч летит к правым воротам, затем возвращается в центр */
+/* Обычное состояние: мяч в центре и мягко пульсирует */
 .hero-visual .pitch-ball {
-  animation: ballShoot 6s cubic-bezier(.45, .05, .55, .95) infinite;
+  animation: ballPulse 3.2s ease-in-out infinite;
+}
+
+/* Гол в реальном матче: мяч летит в ворота один раз */
+.hero-visual.live-goal .pitch-ball {
+  animation: ballShoot 1.9s cubic-bezier(.45, .05, .55, .95) forwards;
 }
 @keyframes ballShoot {
-  0%, 10%   { left: 50%; top: 50%; opacity: 1; }
-  40%       { left: 80%; top: 48%; opacity: 1; }
-  50%       { left: 91%; top: 47%; opacity: 1; }
-  56%       { left: 94%; top: 46%; opacity: 0; }
-  57%       { left: 50%; top: 50%; opacity: 0; }
-  66%, 100% { left: 50%; top: 50%; opacity: 1; }
+  0%   { left: 50%; top: 50%; opacity: 1; }
+  55%  { left: 82%; top: 48%; opacity: 1; }
+  85%  { left: 92%; top: 47%; opacity: 1; }
+  100% { left: 95%; top: 46%; opacity: 0; }
 }
 
 /* Надпись появляется после удара */
@@ -512,14 +515,18 @@ body:has(.fa-cookie:not([hidden])) { padding-bottom: 120px; }
   text-shadow: 0 0 24px rgba(245, 158, 11, .85), 0 4px 18px rgba(0, 0, 0, .6);
   opacity: 0;
   pointer-events: none;
-  animation: goalText 6s ease-in-out infinite;
+}
+
+/* Надпись появляется только при реальном голе */
+.hero-visual.live-goal .goal-flash {
+  animation: goalText 4.4s ease-in-out forwards;
 }
 @keyframes goalText {
-  0%, 50%   { opacity: 0; transform: scale(.7); }
-  56%       { opacity: 1; transform: scale(1.12); }
-  62%       { opacity: 1; transform: scale(1); }
-  80%       { opacity: .9; transform: scale(1); }
-  88%, 100% { opacity: 0; transform: scale(1.05); }
+  0%   { opacity: 0; transform: scale(.7); }
+  12%  { opacity: 1; transform: scale(1.12); }
+  22%  { opacity: 1; transform: scale(1); }
+  78%  { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.04); }
 }
 
 /* Уважаем настройку «уменьшить движение» */
