@@ -407,7 +407,7 @@ async def build() -> None:
         {match["kickoff_utc"].astimezone(MSK).strftime("%Y-%m-%d") for match, _ in prepared}
     )
     options = "".join('<option value="%s">%s</option>' % (day, day) for day in dates)
-    index_content = """<h1>Матч-центр</h1>
+    index_content = """<h1>Футбол сегодня: матчи и вероятности</h1>
 <p class="muted">Ближайшие матчи и то, что модель считает наиболее вероятным.</p>
 <div class="filters">
   <input id="q" type="search" placeholder="Команда или соревнование">
@@ -426,7 +426,7 @@ async def build() -> None:
 
     (OUT / "match-center" / "index.html").write_text(
         PAGE.format(
-            title="Матч-центр: прогнозы и вероятности на ближайшие матчи",
+            title="Футбол сегодня: матчи, расписание и вероятности",
             description="Расписание и вероятности по 20 соревнованиям: тотал, "
             "углы, карточки, исход. Прогнозы в боте за 5 часов до матча. 18+",
             canonical="%s/match-center/" % BASE_URL,
@@ -522,6 +522,11 @@ async def build() -> None:
             if path.parent.name not in fixed
         ]
         urls.append("/guide/")
+    season_dir = OUT / "season"
+    if season_dir.is_dir():
+        urls += [
+            "/season/%s/" % path.parent.name for path in sorted(season_dir.glob("*/index.html"))
+        ]
     results_dir = OUT / "results"
     if results_dir.is_dir():
         urls += [
