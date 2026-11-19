@@ -62,14 +62,15 @@ PAGE = """<!doctype html>
 {content}
 <div class="card" style="margin-top:32px">
   <h3>Полная раскладка — в боте</h3>
-  <p>На сайте — только главное. В боте: индивидуальные тоталы каждой команды,
-     все линии углов и карточек, вероятный счёт и доставка за 5 часов до матча.</p>
-  <p><a class="button" href="{bot}">Открыть бота</a></p>
-</div>
-</main>
-<footer>
-  <p>18+. Материалы — аналитика и вероятности, а не призыв к ставкам.</p>
-  <p>Самозанятый Хидиров Темур Орифжонович · ИНН 021904477296 · khidrov@yandex.ru</p>
+  <p>
+    <a href="/offer.html">Оферта</a> ·
+    <a href="/terms.html">Соглашение</a> ·
+    <a href="/privacy.html">Политика ПД</a> ·
+    <a href="/consent.html">Согласие</a> ·
+    <a href="/rights.html">Права</a> ·
+    <a href="/cookies.html">Cookie</a> ·
+    <a href="#" data-cookie-settings>Настройки cookie</a>
+  </p>
 </footer>
 </body>
 </html>
@@ -488,6 +489,9 @@ async def build() -> None:
         "/offer.html",
         "/terms.html",
         "/privacy.html",
+        "/cookies.html",
+        "/consent.html",
+        "/rights.html",
         "/blog/",
         "/match-center/",
         "/line/",

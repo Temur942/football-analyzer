@@ -14,6 +14,9 @@ PAGES = {
     "offer.md": ("Публичная оферта", "offer.html"),
     "terms.md": ("Пользовательское соглашение", "terms.html"),
     "privacy.md": ("Политика обработки персональных данных", "privacy.html"),
+    "cookies.md": ("Политика использования cookie", "cookies.html"),
+    "consent.md": ("Согласие на обработку персональных данных", "consent.html"),
+    "rights.md": ("Права субъекта персональных данных", "rights.html"),
 }
 
 FONTS = '<link rel="stylesheet" href="fonts/onest.css">'

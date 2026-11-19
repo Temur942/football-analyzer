@@ -351,3 +351,43 @@ footer {
   padding: 10px; font: inherit; margin-bottom: 8px;
 }
 .comments-form .button { width: 100%; }
+
+/* Баннер согласия на cookie */
+.fa-cookie {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  z-index: 100;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(12, 12, 14, .96);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, .45);
+}
+.fa-cookie[hidden] { display: none; }
+.fa-cookie p { margin: 0; flex: 1 1 320px; font-size: 14px; color: var(--muted); }
+.fa-cookie a { color: var(--accent); }
+.fa-cookie-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.fa-cookie button {
+  font: inherit;
+  font-size: 14px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+.fa-cookie button[data-consent="accepted"] {
+  border: none;
+  background: linear-gradient(90deg, #e5320f, #e97318);
+  color: #fff;
+  font-weight: 600;
+}
+.fa-cookie button:hover { opacity: .9; }

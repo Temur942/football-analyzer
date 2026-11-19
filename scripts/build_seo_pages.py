@@ -58,15 +58,15 @@ PAGE = """<!doctype html>
 {content}
 <div class="card" style="margin-top:32px">
   <h3>Полная раскладка — в боте</h3>
-  <p>Здесь главное. В боте: индивидуальные тоталы команд, все линии углов
-     и карточек, вероятный счёт и доставка за 5 часов до матча.</p>
-  <p><a class="button" href="{bot}">Открыть бота</a></p>
-</div>
-</main>
-<footer>
-  <p>18+. Материалы — аналитика и вероятности, а не призыв к ставкам.</p>
-  <p>Самозанятый Хидиров Темур Орифжонович · ИНН 021904477296 · khidrov@yandex.ru</p>
-  <p><a href="https://t.me/footballinho_ru">Канал в Telegram</a></p>
+  <p>
+    <a href="/offer.html">Оферта</a> ·
+    <a href="/terms.html">Соглашение</a> ·
+    <a href="/privacy.html">Политика ПД</a> ·
+    <a href="/consent.html">Согласие</a> ·
+    <a href="/rights.html">Права</a> ·
+    <a href="/cookies.html">Cookie</a> ·
+    <a href="#" data-cookie-settings>Настройки cookie</a>
+  </p>
 </footer>
 </body>
 </html>
