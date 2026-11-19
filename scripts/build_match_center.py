@@ -19,6 +19,7 @@ from urllib.parse import quote
 from football_analyzer.analysis.forecast import MSK, build_forecast
 from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models
 from football_analyzer.storage import db
+from football_analyzer.team_logos import team_html as team_logo_html
 from football_analyzer.teams_ru import to_russian
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -214,7 +215,10 @@ def bar(probability: float, label: str) -> str:
 
 
 def team(name: str) -> str:
-    """Команда с мини-бейджем из первых букв."""
+    """Команда с эмблемой, а если её нет — с мини-бейджем из первых букв."""
+    logo = team_logo_html(name)
+    if logo is not None:
+        return logo
     russian = to_russian(name)
     initials = "".join(part[0] for part in russian.split()[:2]).upper()
     return '<span class="team"><span class="team-badge">%s</span>%s</span>' % (

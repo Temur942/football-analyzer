@@ -69,7 +69,7 @@ async def collect(session: aiohttp.ClientSession, slug: str) -> dict[str, dict]:
     """Собрать команды: имя → id и цвет. Ищем по расписанию за два месяца."""
     teams: dict[str, dict] = {}
     today = datetime.utcnow()
-    for weeks_ago in range(0, 9):
+    for weeks_ago in range(0, 17):
         day = today - timedelta(days=weeks_ago * 7)
         try:
             async with session.get(
