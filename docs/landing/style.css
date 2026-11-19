@@ -400,3 +400,8 @@ footer {
   flex: 0 0 auto;
   vertical-align: -3px;
 }
+
+/* Эмблемы в заголовке страницы матча */
+.match-hero { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.match-hero .team-logo { width: 34px; height: 34px; }
+.match-hero .team { font-size: inherit; gap: 10px; }

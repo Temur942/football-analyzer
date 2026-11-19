@@ -254,12 +254,17 @@ def render_match(match, forecast, competition_name: str) -> str:
         "Полная раскладка в боте за 5 часов до матча. 18+"
         % (home, away, kickoff.strftime("%d.%m %H:%M"))
     )[:300]
-    content = '<p class="muted">%s · %s МСК</p><h1>%s — %s</h1><table>%s</table>' % (
-        html.escape(competition_name),
-        kickoff.strftime("%d.%m %H:%M"),
-        home,
-        away,
-        table,
+    content = (
+        '<p class="muted">%s · %s МСК</p>'
+        '<h1 class="match-hero">%s <span class="muted">—</span> %s</h1>'
+        "<table>%s</table>"
+        % (
+            html.escape(competition_name),
+            kickoff.strftime("%d.%m %H:%M"),
+            team_logo_html(match["home_team"]),
+            team_logo_html(match["away_team"]),
+            table,
+        )
     )
     # Комментарии слева: читать могут все, писать — только вошедшие.
     share_url = "https://t.me/share/url?url=%s&text=%s" % (
