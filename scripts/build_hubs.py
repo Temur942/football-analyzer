@@ -39,7 +39,7 @@ PAGE = """<!doctype html>
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <a class="brand" href="/">FOOTBALLINHO</a>
   <nav>
     <a href="/line/">Беттинг-центр</a>
     <a href="/live/">Live</a>

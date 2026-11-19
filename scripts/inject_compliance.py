@@ -17,6 +17,12 @@ from football_analyzer.metrika import SNIPPET
 ROOT = Path(__file__).resolve().parent.parent
 LANDING = ROOT / "docs" / "landing"
 
+FAVICON = """<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/favicon-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+"""
+
 BANNER = """<div class="fa-cookie" id="fa-cookie-banner" hidden>
   <p>Мы используем cookie для работы сайта и аналитики.
      <a href="/cookies.html">Подробнее</a> · <a href="/privacy.html">Политика данных</a></p>
@@ -41,6 +47,10 @@ def main() -> None:
         if "</body>" not in text:
             continue
 
+        if "favicon-32.png" not in text:
+            text = text.replace("</head>", FAVICON + "</head>", 1)
+        if "site.js" not in text:
+            text = text.replace("</body>", '<script src="/site.js" defer></script>\n</body>', 1)
         if "__faLoadMetrica" not in text:
             text = text.replace("</body>", SNIPPET + "</body>", 1)
         if "fa-cookie-banner" not in text:

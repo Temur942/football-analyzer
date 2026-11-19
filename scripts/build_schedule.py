@@ -46,7 +46,7 @@ PAGE = """<!doctype html>
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <a class="brand" href="/">FOOTBALLINHO</a>
   <nav>
     <a href="/line/">Беттинг-центр</a>
     <a href="/live/">Live</a>
@@ -160,7 +160,7 @@ async def build() -> None:
     # 1. Сегодня
     write_page(
         "today",
-        title="Футбол сегодня: расписание матчей и вероятности | Football Analyzer",
+        title="Футбол сегодня: расписание матчей и вероятности | FOOTBALLINHO",
         description="Какие футбольные матчи играют сегодня: расписание по времени МСК, "
         "вероятности исходов и тоталов на каждый матч. 18+",
         content='<h1>Футбол сегодня</h1><p class="muted">%s · время МСК</p>%s%s'
@@ -175,7 +175,7 @@ async def build() -> None:
     # 2. Завтра
     write_page(
         "tomorrow",
-        title="Футбол завтра: расписание матчей и вероятности | Football Analyzer",
+        title="Футбол завтра: расписание матчей и вероятности | FOOTBALLINHO",
         description="Расписание футбольных матчей на завтра с вероятностями исходов "
         "и тоталов. Время МСК. 18+",
         content='<h1>Футбол завтра</h1><p class="muted">%s · время МСК</p>%s%s'
@@ -225,7 +225,7 @@ async def build() -> None:
 
     write_page(
         "",
-        title="Расписание футбольных матчей на неделю | Football Analyzer",
+        title="Расписание футбольных матчей на неделю | FOOTBALLINHO",
         description="Расписание матчей на неделю по всем турнирам: время МСК, "
         "вероятности исходов и тоталов. 18+",
         content="<h1>Расписание матчей</h1>"
@@ -242,7 +242,7 @@ async def build() -> None:
         body = "".join(match_row(match, forecast) for match, forecast in items)
         write_page(
             slugify(competition_id),
-            title="Расписание матчей %s — Football Analyzer" % name,
+            title="Расписание матчей %s — FOOTBALLINHO" % name,
             description="%s: расписание ближайших матчей, время МСК и вероятности "
             "исходов. 18+" % name,
             content="<h1>Расписание матчей: %s</h1>"

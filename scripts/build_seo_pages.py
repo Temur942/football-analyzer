@@ -44,7 +44,7 @@ PAGE = """<!doctype html>
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <a class="brand" href="/">FOOTBALLINHO</a>
   <nav>
     <a href="/line/">Беттинг-центр</a>
     <a href="/live/">Live</a>
@@ -153,7 +153,7 @@ async def build() -> None:
     )
     write_page(
         "predictions/premier-league",
-        title="Прогнозы на АПЛ: вероятности матчей по математике | Football Analyzer",
+        title="Прогнозы на АПЛ: вероятности матчей по математике | FOOTBALLINHO",
         description="Вероятности исходов, тоталов и углов на матчи Английской "
         "премьер-лиги. Расчёт по трём сезонам истории, обновляется каждый час. 18+",
         content="""
@@ -180,7 +180,7 @@ __TABLE__
     # 2. Углы
     write_page(
         "guide/corners",
-        title="Углы в футболе: как считать вероятности | Football Analyzer",
+        title="Углы в футболе: как считать вероятности | FOOTBALLINHO",
         description="Как прогнозировать количество угловых в футбольном матче: "
         "база по лиге, сила команд, темп. Примеры расчёта и типичные ошибки. 18+",
         content="""
@@ -221,7 +221,7 @@ __TABLE__
     # 3. Как читать вероятности
     write_page(
         "guide/probabilities",
-        title="Как читать вероятности в футбольных прогнозах | Football Analyzer",
+        title="Как читать вероятности в футбольных прогнозах | FOOTBALLINHO",
         description="Что значит вероятность 54% в прогнозе на футбол, чем она "
         "отличается от обещания и как проверять точность модели. 18+",
         content="""

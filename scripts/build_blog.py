@@ -22,12 +22,12 @@ HEAD = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title} — Football Analyzer</title>
+<title>{title} — FOOTBALLINHO</title>
 <meta name="description" content="{summary}">
 <link rel="canonical" href="{canonical}">
 <meta property="og:type" content="article">
 <meta property="og:locale" content="ru_RU">
-<meta property="og:site_name" content="Football Analyzer">
+<meta property="og:site_name" content="FOOTBALLINHO">
 <meta property="og:url" content="{canonical}">
 <meta property="og:image" content="https://footballinho.ru/og.png">
 <meta property="og:image:width" content="1200">
@@ -43,7 +43,7 @@ HEAD = """<!doctype html>
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <a class="brand" href="/">FOOTBALLINHO</a>
   <nav>
     <a href="/blog/">Статьи</a>
     <a href="/about.html">О сервисе</a>
@@ -88,7 +88,7 @@ INDEX_HEAD = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Статьи — Football Analyzer</title>
+<title>Статьи — FOOTBALLINHO</title>
 <meta name="description" content="Разборы матчей: вероятности голов, углов и карточек.">
 <link rel="canonical" href="{canonical}">
 <link rel="stylesheet" href="../fonts/onest.css">
@@ -96,7 +96,7 @@ INDEX_HEAD = """<!doctype html>
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <a class="brand" href="/">FOOTBALLINHO</a>
   <nav>
     <a href="/about.html">О сервисе</a>
     <a href="/#prices">Тарифы</a>
@@ -156,8 +156,8 @@ def article_jsonld(post: Post, canonical: str) -> str:
             "dateModified": post.date,
             "inLanguage": "ru-RU",
             "mainEntityOfPage": canonical,
-            "author": {"@type": "Organization", "name": "Football Analyzer"},
-            "publisher": {"@type": "Organization", "name": "Football Analyzer", "url": SITE + "/"},
+            "author": {"@type": "Organization", "name": "FOOTBALLINHO"},
+            "publisher": {"@type": "Organization", "name": "FOOTBALLINHO", "url": SITE + "/"},
         },
         ensure_ascii=False,
     )

@@ -52,7 +52,7 @@ PAGE = """<!doctype html>
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <a class="brand" href="/">FOOTBALLINHO</a>
   <nav>
     <a href="/line/">Беттинг-центр</a>
     <a href="/live/">Live</a>
@@ -248,7 +248,7 @@ async def build() -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             PAGE.format(
-                title="Турнирная таблица %s %s — Football Analyzer"
+                title="Турнирная таблица %s %s — FOOTBALLINHO"
                 % (html.escape(name_ru), season_label(latest_season)),
                 description="%s: турнирная таблица, очки, разница мячей, форма команд "
                 "и вероятности на ближайшие матчи. 18+" % name_ru,
@@ -272,7 +272,7 @@ async def build() -> None:
     index_path = OUT / "index.html"
     index_path.write_text(
         PAGE.format(
-            title="Турнирные таблицы футбольных чемпионатов — Football Analyzer",
+            title="Турнирные таблицы футбольных чемпионатов — FOOTBALLINHO",
             description="Турнирные таблицы 20 соревнований: очки, разница мячей, форма. "
             "Рядом — вероятности на ближайшие матчи. 18+",
             canonical="%s/table/" % BASE_URL,

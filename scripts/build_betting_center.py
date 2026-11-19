@@ -40,7 +40,7 @@ PAGE = """<!doctype html>
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <a class="brand" href="/">FOOTBALLINHO</a>
   <nav>
     <a href="/line/">Беттинг-центр</a>
     <a href="/live/">Live</a>
@@ -167,7 +167,7 @@ async def build() -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         PAGE.format(
-            title="Беттинг-центр: матчи и вероятности по турнирам | Football Analyzer",
+            title="Беттинг-центр: матчи и вероятности по турнирам | FOOTBALLINHO",
             description="Все ближайшие футбольные матчи с вероятностями исходов, "
             "тоталов, углов и карточек. Список турниров и расписание. 18+",
             canonical="%s/line/" % BASE_URL,

@@ -26,14 +26,14 @@ TEMPLATE = """<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{title} — Football Analyzer</title>
+<title>{title} — FOOTBALLINHO</title>
 {fonts}
 <meta name="yandex-verification" content="2d7c2dde8b71028d">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <a class="brand" href="/">FOOTBALLINHO</a>
   <nav>
     <a href="/line/">Беттинг-центр</a>
     <a href="/live/">Live</a>

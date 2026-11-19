@@ -48,7 +48,7 @@ PAGE = """<!doctype html>
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <a class="brand" href="/">FOOTBALLINHO</a>
   <nav>
     <a href="/line/">Беттинг-центр</a>
     <a href="/live/">Live</a>
@@ -483,7 +483,7 @@ async def build() -> None:
         directory.mkdir(parents=True, exist_ok=True)
         (directory / "index.html").write_text(
             PAGE.format(
-                title=html.escape("Прогнозы на %s — вероятности матчей | Football Analyzer" % name),
+                title=html.escape("Прогнозы на %s — вероятности матчей | FOOTBALLINHO" % name),
                 description=html.escape(
                     "%s: расписание и вероятности — тотал, углы, карточки. 18+" % name
                 ),

@@ -46,7 +46,7 @@ PAGE = """<!doctype html>
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <a class="brand" href="/">FOOTBALLINHO</a>
   <nav>
     <a href="/line/">Беттинг-центр</a>
     <a href="/live/">Live</a>
@@ -225,7 +225,7 @@ async def build() -> None:
 
     write_page(
         "",
-        title="Результаты футбольных матчей и проверка прогнозов | Football Analyzer",
+        title="Результаты футбольных матчей и проверка прогнозов | FOOTBALLINHO",
         description="Результаты футбольных матчей за две недели с проверкой прогноза: "
         "что говорила модель и сбылось ли. 18+",
         content="<h1>Результаты матчей</h1>%s"
@@ -237,7 +237,7 @@ async def build() -> None:
         body = "".join(row(match, match["payload"]) for match in items)
         write_page(
             slugify(competition_id),
-            title="Результаты матчей %s — Football Analyzer" % name,
+            title="Результаты матчей %s — FOOTBALLINHO" % name,
             description="Результаты матчей %s за две недели: счёт и проверка прогноза "
             "модели. 18+" % name,
             content="<h1>Результаты матчей: %s</h1>"

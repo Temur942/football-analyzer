@@ -32,7 +32,7 @@ PAGE = """<!doctype html>
 </head>
 <body>
 <header class="nav">
-  <a class="brand" href="/">⚽ Football Analyzer</a>
+  <a class="brand" href="/">FOOTBALLINHO</a>
   <nav>
     <a href="/line/">Беттинг-центр</a>
     <a href="/live/">Live</a>
@@ -374,7 +374,7 @@ def main() -> None:
     )
     (OUT / "index.html").write_text(
         PAGE.format(
-            title="Футбольная аналитика: разборы и объяснения — Football Analyzer",
+            title="Футбольная аналитика: разборы и объяснения — FOOTBALLINHO",
             description="Как считается вероятность голов, углов и карточек: xG, тоталы, "
             "форма, домашнее преимущество, ничьи. 18+",
             canonical="%s/guide/" % BASE_URL,
