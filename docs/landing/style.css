@@ -391,3 +391,12 @@ footer {
   font-weight: 600;
 }
 .fa-cookie button:hover { opacity: .9; }
+
+/* Эмблема команды рядом с названием */
+.team { display: inline-flex; align-items: center; gap: 8px; }
+.team-logo {
+  width: 18px; height: 18px;
+  object-fit: contain;
+  flex: 0 0 auto;
+  vertical-align: -3px;
+}

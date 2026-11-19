@@ -18,7 +18,7 @@ from pathlib import Path
 from football_analyzer.analysis.forecast import MSK
 from football_analyzer.competitions import load_competitions
 from football_analyzer.storage import db
-from football_analyzer.teams_ru import to_russian
+from football_analyzer.team_logos import team_html
 
 ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "docs" / "landing" / "results"
@@ -127,8 +127,8 @@ def row(match: dict, payload: dict | None) -> str:
             kickoff.strftime("%d.%m"),
             html.escape(str(match["name_ru"])),
             match["id"],
-            html.escape(to_russian(match["home_team"])),
-            html.escape(to_russian(match["away_team"])),
+            team_html(match["home_team"]),
+            team_html(match["away_team"]),
             home_goals,
             away_goals,
             verdict(match, payload)[0],
