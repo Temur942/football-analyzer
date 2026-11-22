@@ -56,6 +56,27 @@ def collect_lines(forecast) -> list[tuple[str, float, float]]:
     return sorted(result, key=lambda item: -item[1])
 
 
+def value_block(forecast) -> str:
+    """Дописать к прогнозу строки с «честным коэффициентом» 1,7–4,0.
+
+    Раньше выжимка уходила отдельным сообщением через пару секунд после
+    прогноза — со стороны это выглядело как дубль. Теперь она часть одного
+    сообщения.
+    """
+    lines = collect_lines(forecast)
+    if not lines:
+        return ""
+    body = "\n".join(
+        "▫️ %s — <b>%.0f%%</b> (коэф. модели %.2f)" % (name, probability * 100, odds)
+        for name, probability, odds in lines[:6]
+    )
+    return (
+        "\n\n🎯 <b>Линии с коэффициентом 1,7+</b>\n"
+        + body
+        + "\n<i>Коэффициент — оценка модели (1/вероятность), не линия букмекера.</i>"
+    )
+
+
 async def send_value_picks(
     bot: object,
     pool: asyncpg.Pool,

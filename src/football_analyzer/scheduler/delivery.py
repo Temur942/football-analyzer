@@ -74,6 +74,7 @@ async def deliver_due(
     send: SendFunc | None = None,
     max_matches: int = 200,
     recipients: list[int] | None = None,
+    value_for: set[int] | None = None,
 ) -> DeliveryReport:
     """Найти матчи в окне «за lead_hours» и разослать прогнозы.
 
@@ -126,6 +127,11 @@ async def deliver_due(
             kickoff_utc=row["kickoff_utc"],
         )
         text = render_text(forecast, row["name_ru"])
+        extra = ""
+        if value_for:
+            from football_analyzer.scheduler.value_picks import value_block
+
+            extra = value_block(forecast)
         await db.save_prediction(pool, row["id"], MODEL_VERSION, forecast_payload(forecast))
 
         for chat_id in chats:
@@ -144,8 +150,9 @@ async def deliver_due(
             if not await db.claim_delivery(pool, row["id"], chat_id):
                 report.skipped += 1
                 continue
+            message = text + extra if extra and value_for and chat_id in value_for else text
             try:
-                await send(chat_id, text)
+                await send(chat_id, message)
             except Exception as exc:  # noqa: BLE001
                 # Telegram ограничивает частоту: если он просит подождать —
                 # ждём ровно столько и повторяем один раз. Иначе при рассылке
@@ -154,7 +161,7 @@ async def deliver_due(
                 if retry_after:
                     await asyncio.sleep(float(retry_after) + 0.5)
                     try:
-                        await send(chat_id, text)
+                        await send(chat_id, message)
                     except Exception as second:  # noqa: BLE001
                         report.failed += 1
                         await db.release_delivery(pool, row["id"], chat_id)
