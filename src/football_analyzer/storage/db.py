@@ -1094,3 +1094,40 @@ async def referral_stats(pool: asyncpg.Pool, chat_id: int) -> tuple[int, int, in
             chat_id,
         )
     return int(invited or 0), int(paid or 0), int(bonuses or 0) * 7
+
+
+async def claim_delivery(pool: asyncpg.Pool, match_id: int, chat_id: int) -> bool:
+    """Занять отправку ДО того, как сообщение уйдёт.
+
+    Ключ (матч, чат) уникален, поэтому выиграть может только один процесс.
+    Раньше запись создавалась после отправки — и два отправителя (бот и
+    таймер) успевали отправить прогноз дважды, а в базе оставалась одна строка.
+    """
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "INSERT INTO deliveries (match_id, chat_id, status) VALUES ($1, $2, 'sending')"
+            " ON CONFLICT DO NOTHING RETURNING id",
+            match_id,
+            chat_id,
+        )
+    return row is not None
+
+
+async def finish_delivery(pool: asyncpg.Pool, match_id: int, chat_id: int) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE deliveries SET status = 'sent'"
+            " WHERE match_id = $1 AND chat_id = $2 AND status = 'sending'",
+            match_id,
+            chat_id,
+        )
+
+
+async def release_delivery(pool: asyncpg.Pool, match_id: int, chat_id: int) -> None:
+    """Снять захват после ошибки — иначе прогноз не уйдёт уже никогда."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM deliveries WHERE match_id = $1 AND chat_id = $2 AND status = 'sending'",
+            match_id,
+            chat_id,
+        )

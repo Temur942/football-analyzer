@@ -139,6 +139,11 @@ async def deliver_due(
                 continue
 
             assert send is not None
+            # Захват ДО отправки: если рядом работает второй отправитель,
+            # он увидит занятый ключ и промолчит. Дубликатов не будет.
+            if not await db.claim_delivery(pool, row["id"], chat_id):
+                report.skipped += 1
+                continue
             try:
                 await send(chat_id, text)
             except Exception as exc:  # noqa: BLE001
@@ -152,12 +157,14 @@ async def deliver_due(
                         await send(chat_id, text)
                     except Exception as second:  # noqa: BLE001
                         report.failed += 1
+                        await db.release_delivery(pool, row["id"], chat_id)
                         log.warning("повтор тоже не удался (%s): %s", chat_id, second)
                         continue
                 # Важно: запись в журнал НЕ создаём. Иначе ключ (матч, чат)
                 # занят статусом failed, и прогноз не уйдёт уже никогда —
                 # сетевая ошибка превратилась бы в потерянное сообщение.
                 report.failed += 1
+                await db.release_delivery(pool, row["id"], chat_id)
                 log.warning(
                     "отправка не удалась (чат %s, матч %s), повторим позже: %s",
                     chat_id,
@@ -165,10 +172,7 @@ async def deliver_due(
                     exc,
                 )
                 continue
-            inserted = await db.try_insert_delivery(pool, row["id"], chat_id, "sent")
-            if inserted:
-                report.sent += 1
-            else:
-                report.skipped += 1
+            await db.finish_delivery(pool, row["id"], chat_id)
+            report.sent += 1
 
     return report

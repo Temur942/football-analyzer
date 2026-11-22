@@ -27,7 +27,7 @@ TEXT = (237, 230, 218)
 MUTED = (188, 172, 146)
 
 
-def _font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont:
+def _font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     path = FONT_BOLD if bold else FONT_REGULAR
     try:
         return ImageFont.truetype(path, size)
@@ -37,7 +37,7 @@ def _font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont:
 
 def _fit_text(
     draw: ImageDraw.ImageDraw, text: str, max_width: int, start: int
-) -> ImageFont.FreeTypeFont:
+) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     size = start
     while size > 24:
         font = _font(size)
@@ -144,7 +144,7 @@ def render_text_card(
     font = _font(76)
     lines = _wrap(draw, title, font, WIDTH - 160)
     while len(lines) > 5 and font.size > 44:
-        font = _font(font.size - 6)
+        font = _font(int(font.size) - 6)
         lines = _wrap(draw, title, font, WIDTH - 160)
 
     line_height = int(font.size * 1.25)
