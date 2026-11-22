@@ -64,7 +64,8 @@ HEAD = """<!doctype html>
   <p><a class="button" href="{bot}">Открыть бота</a></p>
   <p class="muted"><a href="/match-center/">Все матчи и вероятности — в матч-центре</a> ·
   <a href="/guide/">Разборы: xG, тоталы, форма</a> ·
-  <a href="/table/">Таблицы</a> · <a href="/schedule/">Расписание</a> ·
+  <a href="/table/">Таблицы</a>
+    <a href="/archive/">Архив</a> · <a href="/schedule/">Расписание</a> ·
   <a href="/results/">Результаты</a></p>
 </div>
 </article>

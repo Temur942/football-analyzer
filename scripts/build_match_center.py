@@ -56,6 +56,7 @@ PAGE = """<!doctype html>
     <a href="/schedule/">Расписание</a>
     <a href="/results/">Результаты</a>
     <a href="/table/">Таблицы</a>
+    <a href="/archive/">Архив</a>
     <a href="/match-center/">Матч-центр</a>
     <a href="/blog/">Статьи</a>
     <a href="/about.html">О сервисе</a>
@@ -528,6 +529,7 @@ async def build() -> None:
         "/blog/",
         "/match-center/",
         "/table/",
+        "/archive/",
         "/schedule/",
         "/schedule/today/",
         "/schedule/tomorrow/",
@@ -563,6 +565,12 @@ async def build() -> None:
     if season_dir.is_dir():
         urls += [
             "/season/%s/" % path.parent.name for path in sorted(season_dir.glob("*/index.html"))
+        ]
+    archive_dir = OUT / "archive"
+    if archive_dir.is_dir():
+        urls += [
+            "/archive/%s/" % path.relative_to(archive_dir).parent.as_posix()
+            for path in sorted(archive_dir.rglob("index.html"))
         ]
     team_dir = OUT / "team"
     if team_dir.is_dir():

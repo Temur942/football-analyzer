@@ -49,6 +49,7 @@ PAGE = """<!doctype html>
     <a href="/schedule/">Расписание</a>
     <a href="/results/">Результаты</a>
     <a href="/table/">Таблицы</a>
+    <a href="/archive/">Архив</a>
     <a href="/blog/">Статьи</a>
     <a class="cta" href="{bot}">Открыть бота</a>
   </nav>
