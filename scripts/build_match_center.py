@@ -527,7 +527,7 @@ async def build() -> None:
         urls += [
             "/blog/%s" % path.name
             for path in sorted(blog_dir.glob("*.html"))
-            if path.name != "index.html"
+            if path.name != "index.html" and "-day-" not in path.name
         ]
     urls += ["/match-center/%s/" % slug for slug in slugs]
     guide_dir = OUT / "guide"

@@ -24,6 +24,7 @@ HEAD = """<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title} — FOOTBALLINHO</title>
 <meta name="description" content="{summary}">
+{robots}
 <link rel="canonical" href="{canonical}">
 <meta property="og:type" content="article">
 <meta property="og:locale" content="ru_RU">
@@ -165,7 +166,17 @@ def article_jsonld(post: Post, canonical: str) -> str:
     )
 
 
+def is_auto_preview(slug: str) -> bool:
+    """Авто-превью дня: тонкие страницы, Google их не индексирует.
+
+    Мы их оставляем для канала и как архив, но закрываем от поиска:
+    материал дублирует данные страниц матчей.
+    """
+    return "-day-" in slug
+
+
 def render_post(post: Post) -> str:
+    auto_preview = is_auto_preview(post.slug)
     canonical = "%s/blog/%s.html" % (SITE, post.slug)
     return HEAD.format(
         title=html.escape(post.title),
@@ -174,6 +185,7 @@ def render_post(post: Post) -> str:
         date_iso=html.escape(post.date),
         canonical=canonical,
         jsonld=article_jsonld(post, canonical),
+        robots=('<meta name="robots" content="noindex, follow">' if auto_preview else ""),
         body=render_body(post.body),
         bot=BOT_URL,
     )
