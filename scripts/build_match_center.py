@@ -585,8 +585,18 @@ async def build() -> None:
         except OSError:
             return _dt.now().date().isoformat()
 
+    # lastmod только там, где дата действительно что-то значит.
+    # У матчей, таблиц, команд и расписаний страницы пересобираются каждый час:
+    # если писать им сегодняшнюю дату, для Google «обновляется всё и всегда»,
+    # и доверие к карте падает.
+    fresh_prefixes = ("/match/", "/table/", "/team/", "/results/", "/schedule/", "/live/")
     sitemap += [
-        "  <url><loc>%s%s</loc><lastmod>%s</lastmod></url>" % (BASE_URL, url, _lastmod(url))
+        (
+            "  <url><loc>%s%s</loc></url>" % (BASE_URL, url)
+            if url.startswith(fresh_prefixes)
+            else "  <url><loc>%s%s</loc><lastmod>%s</lastmod></url>"
+            % (BASE_URL, url, _lastmod(url))
+        )
         for url in urls
     ]
     sitemap.append("</urlset>")

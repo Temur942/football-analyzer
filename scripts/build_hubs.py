@@ -230,7 +230,9 @@ async def main() -> None:
             continue
         name = getattr(competition, "name_ru", competition_id)
         slug = slugify(competition_id)
-        links = ['<a href="/table/%s/">таблица</a>' % slug]
+        links = []
+        if (OUT / "table" / slug).exists():
+            links.append('<a href="/table/%s/">таблица</a>' % slug)
         if counts.get(competition_id):
             links.append('<a href="/schedule/%s/">расписание</a>' % slug)
         links.append('<a href="/match-center/%s/">матчи</a>' % slug)
