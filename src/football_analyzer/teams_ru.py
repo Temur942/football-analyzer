@@ -317,8 +317,40 @@ def transliterate(name: str) -> str:
     return " ".join(word[:1].upper() + word[1:] for word in text.split())
 
 
+# Клубы РПЛ и частые сокращения: транслитерация вида «Зенит Ст Петерсбург»
+# выглядит нелепо, поэтому задаём нормальные русские названия явно.
+CLUB_OVERRIDES = {
+    "Zenit St Petersburg": "Зенит",
+    "Spartak Moscow": "Спартак",
+    "CSKA Moscow": "ЦСКА",
+    "Dinamo Moscow": "Динамо Москва",
+    "Lokomotiv Moscow": "Локомотив Москва",
+    "Krasnodar": "Краснодар",
+    "Rostov": "Ростов",
+    "Rubin Kazan": "Рубин",
+    "Akhmat Grozny": "Ахмат",
+    "Krylia Sovetov": "Крылья Советов",
+    "Dinamo Makhachkala": "Динамо Махачкала",
+    "Dynamo Makhachkala": "Динамо Махачкала",
+    "Baltika Kaliningrad": "Балтика",
+    "FC Baltika Kaliningrad": "Балтика",
+    "Akron Tolyatti": "Акрон",
+    "Orenburg": "Оренбург",
+    "Gazovik Orenburg": "Оренбург",
+    "Sochi": "Сочи",
+    "Rotor Volgograd": "Ротор",
+    "Rodina Moscow": "Родина",
+    "Torpedo Moscow": "Торпедо",
+    "Fakel Voronezh": "Факел",
+    "Ural Yekaterinburg": "Урал",
+    "Nizhny Novgorod": "Пари НН",
+}
+
+
 def to_russian(name: str) -> str:
     """Русское имя команды: из словаря, иначе транслитерация."""
+    if name in CLUB_OVERRIDES:
+        return CLUB_OVERRIDES[name]
     if name in TEAMS_RU:
         return TEAMS_RU[name]
     # Иногда ESPN добавляет суффиксы вроде «AFC» — пробуем без них.
