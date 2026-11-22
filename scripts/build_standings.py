@@ -21,6 +21,7 @@ from football_analyzer.analysis.service import CUP_PREFIXES, fit_all_models
 from football_analyzer.competitions import load_competitions
 from football_analyzer.storage import db
 from football_analyzer.team_logos import team_html
+from football_analyzer.team_slug import team_slug
 from football_analyzer.teams_ru import to_russian
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -180,7 +181,8 @@ async def build() -> None:
                 "<td>%d:%d</td><td>%+d</td><td><b>%d</b></td><td class='muted'>%s</td></tr>"
                 % (
                     index,
-                    team_html(item["team"]),
+                    '<a href="/team/%s/">%s</a>'
+                    % (team_slug(item["team"]), team_html(item["team"])),
                     item["played"],
                     item["won"],
                     item["drawn"],

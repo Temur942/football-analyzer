@@ -544,6 +544,11 @@ async def build() -> None:
         urls += [
             "/season/%s/" % path.parent.name for path in sorted(season_dir.glob("*/index.html"))
         ]
+    team_dir = OUT / "team"
+    if team_dir.is_dir():
+        urls += ["/team/%s/" % path.parent.name for path in sorted(team_dir.glob("*/index.html"))]
+    if (OUT / "rss.xml").exists():
+        urls.append("/rss.xml")
     results_dir = OUT / "results"
     if results_dir.is_dir():
         urls += [
