@@ -35,6 +35,7 @@ PAGE = """<!doctype html>
 <title>{title}</title>
 <meta name="description" content="{description}">
 <link rel="canonical" href="{canonical}">
+{robots}
 <meta property="og:image" content="https://footballinho.ru/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -289,11 +290,22 @@ def render_match(match, forecast, competition_name: str) -> str:
     return PAGE.format(
         title=html.escape(title),
         description=html.escape(description),
+        robots="",
         canonical="%s/match/%d/" % (BASE_URL, match["id"]),
         jsonld=jsonld,
         content=content,
         bot=BOT_URL,
     )
+
+
+def old_match_robots(kickoff) -> str:
+    """Старые матчи закрываем от индексации: страниц много, пользы мало."""
+    from datetime import UTC, datetime
+
+    age = datetime.now(UTC) - kickoff
+    if age.days > 60:
+        return '<meta name="robots" content="noindex, follow">'
+    return ""
 
 
 def render_result(row) -> str:
@@ -321,6 +333,7 @@ def render_result(row) -> str:
             "%s — итог матча %s, статистика углов и карточек."
             % (score, kickoff.strftime("%d.%m.%Y"))
         )[:300],
+        robots=old_match_robots(row["kickoff_utc"]),
         canonical="%s/match/%d/" % (BASE_URL, row["id"]),
         jsonld=json.dumps(
             {
@@ -389,12 +402,17 @@ async def build() -> None:
             (directory / "index.html").write_text(render_result(row), encoding="utf-8")
 
     all_rows = []
+    shown = 0
+    LIMIT = 60
     for match, forecast in prepared:
         kickoff = match["kickoff_utc"].astimezone(MSK)
         home = html.escape(to_russian(match["home_team"]))
         away = html.escape(to_russian(match["away_team"]))
         link = "/match/%d/" % match["id"]
+        if shown >= LIMIT:
+            continue
         text = ("%s %s %s" % (home, away, match["name_ru"])).lower()
+        shown += 1
         all_rows.append(
             '<tr data-date="%s" data-text="%s"><td>%s</td><td>%s</td>'
             '<td><a href="%s">%s — %s</a></td><td>%s</td><td>%s</td><td>%s</td></tr>'

@@ -118,7 +118,7 @@ async def build() -> None:
     async with pool.acquire() as conn:
         latest = await conn.fetchval("SELECT max(season) FROM matches")
         finished = await conn.fetch(
-            "SELECT competition_id, home_team, away_team, home_goals, away_goals, kickoff_utc"
+            "SELECT id, competition_id, home_team, away_team, home_goals, away_goals, kickoff_utc"
             " FROM matches WHERE season = $1 AND status = 'finished'"
             " AND home_goals IS NOT NULL ORDER BY kickoff_utc",
             latest,
@@ -155,6 +155,23 @@ async def build() -> None:
                 key=lambda m: m["kickoff_utc"],
             )[:5]
 
+            season_rows = "".join(
+                '<tr><td>%s</td><td>%s</td><td><a href="/match/%d/">%d:%d</a></td>'
+                "<td>%s</td></tr>"
+                % (
+                    row["kickoff_utc"].astimezone(MSK).strftime("%d.%m"),
+                    html.escape(russian)
+                    if row["home_team"] == team
+                    else team_html(row["home_team"]),
+                    row["id"],
+                    int(row["home_goals"]),
+                    int(row["away_goals"]),
+                    team_html(row["away_team"])
+                    if row["home_team"] == team
+                    else html.escape(russian),
+                )
+                for row in sorted(team_matches, key=lambda r: r["kickoff_utc"], reverse=True)
+            )
             result_rows = "".join(
                 "<tr><td>%s</td><td>%s</td><td><b>%d:%d</b></td><td>%s</td></tr>"
                 % (
@@ -231,6 +248,10 @@ async def build() -> None:
                 + "<table><thead><tr><th>Дата</th><th>Хозяева</th><th>Счёт</th><th>Гости</th>"
                 "</tr></thead><tbody>%s</tbody></table>"
                 % result_rows
+                + '<h2 class="section-title">Все матчи сезона</h2>'
+                + "<table><thead><tr><th>Дата</th><th>Хозяева</th><th>Счёт</th><th>Гости</th>"
+                "</tr></thead><tbody>%s</tbody></table>"
+                % season_rows
                 + '<p class="muted"><a href="/schedule/%s/">Расписание %s</a> · '
                 '<a href="/results/%s/">Результаты</a></p>'
                 % (comp_slug, html.escape(name), comp_slug)
