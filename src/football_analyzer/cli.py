@@ -982,6 +982,132 @@ def cmd_funnel(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _add_partner(dsn: str, args) -> str:
+    pool = await db.connect(dsn)
+    try:
+        await db.apply_schema(pool)
+        await db.add_partner(
+            pool,
+            slug=args.slug,
+            name=args.name,
+            channel_url=args.channel_url,
+            audience=args.audience,
+            brand_color=args.color,
+        )
+        return args.slug
+    finally:
+        await pool.close()
+
+
+def cmd_add_partner(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        slug = asyncio.run(_add_partner(settings.require_database_url(), args))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    print("Партнёр сохранён: %s" % slug)
+    print("Ссылка для аудитории: https://t.me/footballizator_bot?start=ch_%s" % slug)
+    return EXIT_OK
+
+
+async def _add_promo(dsn: str, args) -> str:
+    pool = await db.connect(dsn)
+    try:
+        await db.apply_schema(pool)
+        await db.add_promo(
+            pool,
+            code=args.code,
+            partner_slug=args.partner,
+            days=args.days,
+            max_uses=args.max_uses,
+        )
+        return args.code.upper()
+    finally:
+        await pool.close()
+
+
+def cmd_add_promo(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        code = asyncio.run(_add_promo(settings.require_database_url(), args))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    print("Промокод создан: %s (%d дней, лимит %d)" % (code, args.days, args.max_uses))
+    return EXIT_OK
+
+
+async def _partner_stats(dsn: str, slug: str | None) -> list[dict]:
+    pool = await db.connect(dsn)
+    try:
+        partners = await db.partners_list(pool)
+        result = []
+        async with pool.acquire() as conn:
+            for partner in partners:
+                if slug and partner["slug"] != slug:
+                    continue
+                subs = await conn.fetchval(
+                    "SELECT count(*) FROM subscribers WHERE source = $1", partner["slug"]
+                )
+                paid = await conn.fetchval(
+                    "SELECT count(*) FROM subscribers WHERE source = $1 AND paid_until IS NOT NULL",
+                    partner["slug"],
+                )
+                revenue = await conn.fetchval(
+                    "SELECT coalesce(sum(p.amount), 0) FROM payments p"
+                    " JOIN subscribers s ON s.chat_id = p.chat_id"
+                    " WHERE s.source = $1 AND p.status = 'succeeded'",
+                    partner["slug"],
+                )
+                promo = await conn.fetchval(
+                    "SELECT coalesce(sum(used_count), 0) FROM promo_codes WHERE partner_slug = $1",
+                    partner["slug"],
+                )
+                result.append(
+                    {
+                        "slug": partner["slug"],
+                        "name": partner["name"],
+                        "regs": int(subs or 0),
+                        "paid": int(paid or 0),
+                        "revenue": float(revenue or 0),
+                        "promo": int(promo or 0),
+                    }
+                )
+        return result
+    finally:
+        await pool.close()
+
+
+def cmd_partner_stats(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        rows = asyncio.run(_partner_stats(settings.require_database_url(), args.slug))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    if not rows:
+        print("Партнёров пока нет.")
+        return EXIT_OK
+    print(
+        "%-18s %-24s %6s %6s %10s %6s"
+        % ("slug", "название", "регистр", "оплаты", "выручка", "промо")
+    )
+    for row in rows:
+        print(
+            "%-18s %-24s %6d %6d %10.0f %6d"
+            % (
+                row["slug"],
+                row["name"][:24],
+                row["regs"],
+                row["paid"],
+                row["revenue"],
+                row["promo"],
+            )
+        )
+    return EXIT_OK
+
+
 async def _grant_days(dsn: str, chat_id: int, days: int) -> str:
     pool = await db.connect(dsn)
     try:
@@ -1459,6 +1585,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_funnel = sub.add_parser("funnel", help="воронка: шаги start → consent → оплата")
     p_funnel.set_defaults(func=cmd_funnel)
+
+    p_partner = sub.add_parser("add-partner", help="зарегистрировать партнёра")
+    p_partner.add_argument("--slug", required=True)
+    p_partner.add_argument("--name", required=True)
+    p_partner.add_argument("--channel-url", default=None)
+    p_partner.add_argument("--audience", default=None)
+    p_partner.add_argument("--color", default="#e5320f")
+    p_partner.set_defaults(func=cmd_add_partner)
+
+    p_promo = sub.add_parser("add-promo", help="создать промокод партнёра")
+    p_promo.add_argument("--code", required=True)
+    p_promo.add_argument("--partner", default=None)
+    p_promo.add_argument("--days", type=int, default=7)
+    p_promo.add_argument("--max-uses", type=int, default=50)
+    p_promo.set_defaults(func=cmd_add_promo)
+
+    p_pstats = sub.add_parser("partner-stats", help="статистика по партнёрам")
+    p_pstats.add_argument("--slug", default=None)
+    p_pstats.set_defaults(func=cmd_partner_stats)
 
     p_grant = sub.add_parser("grant-days", help="выдать или продлить подписку")
     p_grant.add_argument("--chat-id", type=int, required=True)

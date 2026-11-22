@@ -82,9 +82,13 @@ def render_card(
     draw.text((60, 120), kickoff, font=font(38), fill=TEXT)
     draw.line([(60, 190), (WIDTH - 60, 190)], fill=(16, 185, 129, 120), width=3)
 
-    draw.text((WIDTH // 2, 330), home, font=fit(draw, home, WIDTH - 140, 88), fill=TEXT, anchor="mm")
+    draw.text(
+        (WIDTH // 2, 330), home, font=fit(draw, home, WIDTH - 140, 88), fill=TEXT, anchor="mm"
+    )
     draw.text((WIDTH // 2, 430), "vs", font=font(44, False), fill=MUTED, anchor="mm")
-    draw.text((WIDTH // 2, 530), away, font=fit(draw, away, WIDTH - 140, 88), fill=TEXT, anchor="mm")
+    draw.text(
+        (WIDTH // 2, 530), away, font=fit(draw, away, WIDTH - 140, 88), fill=TEXT, anchor="mm"
+    )
 
     top = 700
     for index, (label, probability) in enumerate(lines[:4]):
@@ -93,7 +97,9 @@ def render_card(
         percent = int(round(probability * 100))
         draw.text((WIDTH - 60, y), "%d%%" % percent, font=font(44), fill=GREEN, anchor="ra")
         bar_y = y + 62
-        draw.rounded_rectangle([60, bar_y, WIDTH - 60, bar_y + 22], radius=11, fill=(255, 255, 255, 26))
+        draw.rounded_rectangle(
+            [60, bar_y, WIDTH - 60, bar_y + 22], radius=11, fill=(255, 255, 255, 26)
+        )
         share = max(0.02, min(probability, 1.0))
         draw.rounded_rectangle(
             [60, bar_y, 60 + int((WIDTH - 120) * share), bar_y + 22], radius=11, fill=GREEN
@@ -118,7 +124,9 @@ def main() -> None:
     parser.add_argument("--away", required=True)
     parser.add_argument("--kickoff", required=True)
     parser.add_argument("--competition", default="")
-    parser.add_argument("--line", action="append", default=[], help="подпись:вероятность, например 'Тотал 2,5:0.54'")
+    parser.add_argument(
+        "--line", action="append", default=[], help="подпись:вероятность, например 'Тотал 2,5:0.54'"
+    )
     parser.add_argument("--out", default="card.png")
     parser.add_argument("--footer", default="@footballizator_bot")
     args = parser.parse_args()

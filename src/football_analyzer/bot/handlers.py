@@ -250,11 +250,19 @@ async def handle_start(
         except Exception as exc:  # noqa: BLE001
             log.error("не удалось записать пригласившего: %s", exc)
     source = _source_from(command.args if command else None)
+    partner = None
     if source is not None and pool is not None:
         try:
             await db.set_source(pool, user.id, source)
+            partner = await db.partner_by_slug(pool, source)
         except Exception as exc:  # noqa: BLE001
             log.error("не удалось записать источник: %s", exc)
+    if partner is not None:
+        # Партнёрская ссылка: приветствуем от имени канала, который привёл.
+        await message.answer(
+            "Вы пришли из <b>%s</b>. Спасибо, что заглянули — пробный доступ на 3 дня "
+            "включён после согласия." % partner["name"]
+        )
     await _event(pool, user.id, "start")
 
     if not has_consent:
@@ -573,6 +581,28 @@ async def handle_faq(message: Message, has_access: bool = True) -> None:
         "Публикуем и общую цифру, и только уверенные прогнозы.",
         reply_markup=main_menu() if has_access else None,
     )
+
+
+@router.message(Command("promo"))
+async def handle_promo(
+    message: Message, command: CommandObject | None = None, pool: asyncpg.Pool | None = None
+) -> None:
+    """Активировать промокод партнёра: /promo КОД."""
+    if message.from_user is None:
+        return
+    code = (command.args or "").strip() if command else ""
+    if not code:
+        await message.answer("Напишите код после команды: <code>/promo КОД</code>")
+        return
+    if pool is None:
+        await message.answer("Сервис временно недоступен, попробуйте позже.")
+        return
+    days, text = await db.redeem_promo(pool, code, message.from_user.id)
+    if days is None:
+        await message.answer(text)
+        return
+    await db.grant_days(pool, message.from_user.id, days)
+    await message.answer("%s\nВам начислено <b>%d дней</b> доступа." % (text, days))
 
 
 @router.message(Command("invite"))

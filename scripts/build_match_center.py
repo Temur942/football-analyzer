@@ -572,6 +572,9 @@ async def build() -> None:
             "/archive/%s/" % path.relative_to(archive_dir).parent.as_posix()
             for path in sorted(archive_dir.rglob("index.html"))
         ]
+    partner_dir = OUT / "p"
+    if partner_dir.is_dir():
+        urls += ["/p/%s/" % path.parent.name for path in sorted(partner_dir.glob("*/index.html"))]
     team_dir = OUT / "team"
     if team_dir.is_dir():
         urls += ["/team/%s/" % path.parent.name for path in sorted(team_dir.glob("*/index.html"))]

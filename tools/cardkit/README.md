@@ -27,7 +27,9 @@ from cardkit import render_card
 from pathlib import Path
 
 render_card(
-    home="Зенит", away="Спартак", kickoff="23.11, 19:30 МСК",
+    home="Зенит",
+    away="Спартак",
+    kickoff="23.11, 19:30 МСК",
     lines=[("Тотал 2,5", 0.54), ("Углы 9,5", 0.62)],
     out_path=Path("card.png"),
 )

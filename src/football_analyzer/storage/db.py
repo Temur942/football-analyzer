@@ -1131,3 +1131,95 @@ async def release_delivery(pool: asyncpg.Pool, match_id: int, chat_id: int) -> N
             match_id,
             chat_id,
         )
+
+
+async def partner_by_slug(pool: asyncpg.Pool, slug: str) -> asyncpg.Record | None:
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
+            "SELECT slug, name, channel_url, audience, brand_color FROM partners"
+            " WHERE slug = $1 AND active",
+            slug,
+        )
+
+
+async def partners_list(pool: asyncpg.Pool) -> list[asyncpg.Record]:
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            "SELECT slug, name, channel_url, audience, brand_color FROM partners"
+            " WHERE active ORDER BY created_at"
+        )
+
+
+async def add_partner(
+    pool: asyncpg.Pool,
+    *,
+    slug: str,
+    name: str,
+    channel_url: str | None = None,
+    audience: str | None = None,
+    brand_color: str = "#e5320f",
+) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO partners (slug, name, channel_url, audience, brand_color)"
+            " VALUES ($1, $2, $3, $4, $5)"
+            " ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name,"
+            " channel_url = EXCLUDED.channel_url, audience = EXCLUDED.audience,"
+            " brand_color = EXCLUDED.brand_color",
+            slug,
+            name,
+            channel_url,
+            audience,
+            brand_color,
+        )
+
+
+async def add_promo(
+    pool: asyncpg.Pool, *, code: str, partner_slug: str | None, days: int, max_uses: int
+) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO promo_codes (code, partner_slug, days, max_uses)"
+            " VALUES ($1, $2, $3, $4)"
+            " ON CONFLICT (code) DO UPDATE SET days = EXCLUDED.days,"
+            " max_uses = EXCLUDED.max_uses, active = true",
+            code.upper(),
+            partner_slug,
+            days,
+            max_uses,
+        )
+
+
+async def redeem_promo(pool: asyncpg.Pool, code: str, chat_id: int) -> tuple[int | None, str]:
+    """Погасить промокод. Возвращает (дни, сообщение) или None."""
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT code, days, max_uses, used_count, active FROM promo_codes"
+                " WHERE code = $1 FOR UPDATE",
+                code.upper(),
+            )
+            if row is None:
+                return None, "Такого промокода нет."
+            if not row["active"]:
+                return None, "Промокод больше не действует."
+            if row["used_count"] >= row["max_uses"]:
+                return None, "Лимит активаций промокода исчерпан."
+            used = await conn.fetchrow(
+                "SELECT 1 FROM promo_uses WHERE code = $1 AND chat_id = $2",
+                row["code"],
+                chat_id,
+            )
+            if used is not None:
+                return None, "Вы уже использовали этот промокод."
+            await conn.execute(
+                "INSERT INTO promo_uses (code, chat_id, days) VALUES ($1, $2, $3)",
+                row["code"],
+                chat_id,
+                row["days"],
+            )
+            await conn.execute(
+                "UPDATE promo_codes SET used_count = used_count + 1 WHERE code = $1",
+                row["code"],
+            )
+    return int(row["days"]), "Промокод активирован."
