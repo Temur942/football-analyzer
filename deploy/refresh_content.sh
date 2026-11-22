@@ -33,6 +33,7 @@ $PY scripts/build_blog.py 2>&1 | tail -1
 echo "=== счётчик Метрики ==="
 $PY scripts/inject_metrika.py 2>&1 | tail -1
 $PY scripts/inject_compliance.py 2>&1 | tail -1
+$PY scripts/inject_accuracy.py 2>&1 | tail -1
 
 echo "=== очередь канала ==="
 $PY -m football_analyzer.cli seed-blog --dir docs/blog 2>&1 | tail -3
