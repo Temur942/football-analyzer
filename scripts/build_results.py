@@ -223,12 +223,30 @@ async def build() -> None:
         else '<p class="muted">Прогнозов за период пока нет.</p>'
     )
 
+    results_ld = json.dumps(
+        {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": "Результаты футбольных матчей",
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": index,
+                    "name": "%s — %s" % (m["home_team"], m["away_team"]),
+                }
+                for index, m in enumerate(prepared[:30], start=1)
+            ],
+        },
+        ensure_ascii=False,
+    )
     write_page(
         "",
         title="Результаты футбольных матчей и проверка прогнозов | FOOTBALLINHO",
         description="Результаты футбольных матчей за две недели с проверкой прогноза: "
         "что говорила модель и сбылось ли. 18+",
-        content="<h1>Результаты матчей</h1>%s"
+        content='<script type="application/ld+json">%s</script>'
+        % results_ld
+        + "<h1>Результаты матчей</h1>%s"
         '<div class="grid">%s</div>%s' % (summary, "".join(cards), "".join(days)),
     )
 

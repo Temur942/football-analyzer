@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import json
 import os
 import re
 from pathlib import Path
@@ -244,6 +245,19 @@ async def build() -> None:
             % (html.escape(name_ru), season_label(latest_season), "".join(table_rows), next_block)
         )
 
+        table_ld = json.dumps(
+            {
+                "@context": "https://schema.org",
+                "@type": "ItemList",
+                "name": "Турнирная таблица %s %s" % (name_ru, season_label(latest_season)),
+                "itemListElement": [
+                    {"@type": "ListItem", "position": index, "name": to_russian(item["team"])}
+                    for index, item in enumerate(rows[:20], start=1)
+                ],
+            },
+            ensure_ascii=False,
+        )
+        content += '<script type="application/ld+json">%s</script>' % table_ld
         path = OUT / slug / "index.html"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(

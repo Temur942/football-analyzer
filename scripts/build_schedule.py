@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import json
 import os
 import re
 from datetime import datetime, timedelta
@@ -223,12 +224,30 @@ async def build() -> None:
             "<th>Исход</th><th>Тотал</th></tr></thead><tbody>%s</tbody></table>" % (title, body)
         )
 
+    week_ld = json.dumps(
+        {
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            "name": "Расписание футбольных матчей",
+            "itemListElement": [
+                {
+                    "@type": "ListItem",
+                    "position": i,
+                    "name": "%s — %s" % (m["home_team"], m["away_team"]),
+                }
+                for i, (m, _) in enumerate(prepared[:30], start=1)
+            ],
+        },
+        ensure_ascii=False,
+    )
     write_page(
         "",
         title="Расписание футбольных матчей на неделю | FOOTBALLINHO",
         description="Расписание матчей на неделю по всем турнирам: время МСК, "
         "вероятности исходов и тоталов. 18+",
-        content="<h1>Расписание матчей</h1>"
+        content='<script type="application/ld+json">%s</script>'
+        % week_ld
+        + "<h1>Расписание матчей</h1>"
         '<p class="muted">Ближайшая неделя, время МСК. '
         '<a href="/schedule/today/">Сегодня</a> · '
         '<a href="/schedule/tomorrow/">Завтра</a></p>'

@@ -564,7 +564,26 @@ async def build() -> None:
         '<?xml version="1.0" encoding="UTF-8"?>',
         '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
     ]
-    sitemap += ["  <url><loc>%s%s</loc></url>" % (BASE_URL, url) for url in urls]
+    from datetime import datetime as _dt
+
+    def _lastmod(url: str) -> str:
+        """Дата изменения страницы по файлу — поисковик видит, что обновлять."""
+        clean = url.strip("/")
+        if url == "/":
+            path = OUT / "index.html"
+        elif url.endswith(".html"):
+            path = OUT / url.lstrip("/")
+        else:
+            path = OUT / clean / "index.html"
+        try:
+            return _dt.fromtimestamp(path.stat().st_mtime).date().isoformat()
+        except OSError:
+            return _dt.now().date().isoformat()
+
+    sitemap += [
+        "  <url><loc>%s%s</loc><lastmod>%s</lastmod></url>" % (BASE_URL, url, _lastmod(url))
+        for url in urls
+    ]
     sitemap.append("</urlset>")
     (OUT / "sitemap.xml").write_text("\n".join(sitemap) + "\n", encoding="utf-8")
     print(

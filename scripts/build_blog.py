@@ -62,7 +62,9 @@ HEAD = """<!doctype html>
      Прогноз приходит за 5 часов до матча.</p>
   <p><a class="button" href="{bot}">Открыть бота</a></p>
   <p class="muted"><a href="/match-center/">Все матчи и вероятности — в матч-центре</a> ·
-  <a href="/guide/">Разборы: xG, тоталы, форма</a></p>
+  <a href="/guide/">Разборы: xG, тоталы, форма</a> ·
+  <a href="/table/">Таблицы</a> · <a href="/schedule/">Расписание</a> ·
+  <a href="/results/">Результаты</a></p>
 </div>
 </article>
 </main>
@@ -177,9 +179,59 @@ def render_post(post: Post) -> str:
     )
 
 
+def build_rss(posts) -> None:
+    """Лента статей: поисковики быстрее замечают новые материалы."""
+    from datetime import datetime, timezone
+    from datetime import time as dt_time
+    from email.utils import format_datetime
+
+    items = []
+    for post in posts[:20]:
+        try:
+            published = datetime.combine(
+                datetime.strptime(post.date, "%Y-%m-%d").date(),
+                dt_time(10, 0),
+                tzinfo=timezone.utc,
+            )
+        except (ValueError, AttributeError):
+            published = datetime.now(timezone.utc)
+        items.append(
+            "    <item>\n"
+            "      <title>%s</title>\n"
+            "      <link>https://footballinho.ru/blog/%s.html</link>\n"
+            "      <guid>https://footballinho.ru/blog/%s.html</guid>\n"
+            "      <pubDate>%s</pubDate>\n"
+            "      <description>%s</description>\n"
+            "    </item>"
+            % (
+                _xml(post.title),
+                post.slug,
+                post.slug,
+                format_datetime(published),
+                _xml(post.summary),
+            )
+        )
+    feed = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<rss version="2.0">\n  <channel>\n'
+        "    <title>FOOTBALLINHO — статьи</title>\n"
+        "    <link>https://footballinho.ru/blog/</link>\n"
+        "    <description>Разборы футбольной аналитики и вероятностей</description>\n"
+        "    <language>ru</language>\n" + "\n".join(items) + "\n  </channel>\n</rss>\n"
+    )
+    (ROOT / "docs" / "landing" / "rss.xml").write_text(feed, encoding="utf-8")
+
+
+def _xml(text: str) -> str:
+    return (
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    )
+
+
 def main() -> None:
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     posts = load_posts(BLOG_DIR)
+    build_rss(posts)
     for post in posts:
         (OUT_DIR / ("%s.html" % post.slug)).write_text(render_post(post), encoding="utf-8")
     items = "".join(
