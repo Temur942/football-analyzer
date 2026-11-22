@@ -27,17 +27,17 @@ TEXT = (237, 230, 218)
 MUTED = (188, 172, 146)
 
 
-def _font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _font(size: int, bold: bool = True) -> ImageFont.FreeTypeFont:
     path = FONT_BOLD if bold else FONT_REGULAR
     try:
         return ImageFont.truetype(path, size)
     except OSError:
-        return ImageFont.load_default()
+        return ImageFont.load_default()  # type: ignore[return-value]
 
 
 def _fit_text(
     draw: ImageDraw.ImageDraw, text: str, max_width: int, start: int
-) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+) -> ImageFont.FreeTypeFont:
     size = start
     while size > 24:
         font = _font(size)
