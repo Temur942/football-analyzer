@@ -224,3 +224,8 @@ __marimo__/
 # .env.local — без этих строк токен бота уехал бы в репозиторий.
 .env.local
 .env.*.local
+
+# Генерируется сборкой: если держать в git, деплой откатывает свежую карту
+docs/landing/sitemap.xml
+docs/landing/live.json
+docs/landing/logos/
