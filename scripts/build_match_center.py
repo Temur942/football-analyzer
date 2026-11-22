@@ -456,6 +456,7 @@ async def build() -> None:
             title="Футбол сегодня: матчи, расписание и вероятности",
             description="Расписание и вероятности по 20 соревнованиям: тотал, "
             "углы, карточки, исход. Прогнозы в боте за 5 часов до матча. 18+",
+            robots="",
             canonical="%s/match-center/" % BASE_URL,
             jsonld='{"@context":"https://schema.org","@type":"ItemList"}',
             content=index_content,
@@ -505,6 +506,7 @@ async def build() -> None:
                 description=html.escape(
                     "%s: расписание и вероятности — тотал, углы, карточки. 18+" % name
                 ),
+                robots="",
                 canonical="%s/match-center/%s/" % (BASE_URL, slug),
                 jsonld='{"@context":"https://schema.org","@type":"ItemList"}',
                 content=content,
