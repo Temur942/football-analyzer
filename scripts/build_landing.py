@@ -29,6 +29,7 @@ TEMPLATE = """<!doctype html>
 <title>{title} — FOOTBALLINHO</title>
 {fonts}
 <meta name="yandex-verification" content="2d7c2dde8b71028d">
+<link rel="canonical" href="{canonical}">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -121,7 +122,13 @@ def main() -> None:
     for source, (title, target) in PAGES.items():
         body = convert((LEGAL / source).read_text(encoding="utf-8"))
         (OUT / target).write_text(
-            TEMPLATE.format(title=title, body=body, fonts=FONTS), encoding="utf-8"
+            TEMPLATE.format(
+                title=title,
+                body=body,
+                fonts=FONTS,
+                canonical="https://footballinho.ru/%s" % target,
+            ),
+            encoding="utf-8",
         )
         print("собрано:", target)
 
