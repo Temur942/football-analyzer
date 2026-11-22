@@ -29,8 +29,9 @@
   }
 
   function apply(value) {
-    if (value === 'accepted' && typeof window.__faLoadMetrica === 'function') {
-      window.__faLoadMetrica();
+    if (value === 'accepted') {
+      if (typeof window.__faLoadMetrica === 'function') window.__faLoadMetrica();
+      if (typeof window.__faLoadUmami === 'function') window.__faLoadUmami();
     }
   }
 
