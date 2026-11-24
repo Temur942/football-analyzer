@@ -982,6 +982,109 @@ def cmd_funnel(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+async def _pay_test(dsn: str, args) -> tuple[str, str]:
+    """Создать платёж вручную и вернуть ссылку на оплату.
+
+    Нужно для проверки на стейдже, где бот может быть выключен: платёж
+    создаётся через API ЮKassa и записывается в ту же таблицу payments.
+    """
+    from football_analyzer.payments.yookassa import create_payment
+
+    settings = get_settings()
+    pool = await db.connect(dsn)
+    try:
+        await db.apply_schema(pool)
+        row_id = await db.create_payment(pool, args.chat_id, args.days, args.amount)
+        async with aiohttp.ClientSession() as session:
+            data = await create_payment(
+                session,
+                shop_id=settings.yookassa_shop_id or "",
+                secret_key=settings.yookassa_secret_key or "",
+                amount_rub=args.amount,
+                description="FOOTBALLINHO: подписка %d дней" % args.days,
+                return_url=settings.yookassa_return_url or "https://footballinho.ru/thanks.html",
+                chat_id=args.chat_id,
+                days=args.days,
+            )
+        payment_id = str(data.get("id") or "")
+        url = str((data.get("confirmation") or {}).get("confirmation_url") or "")
+        await db.attach_payment_id(pool, row_id, payment_id)
+    finally:
+        await pool.close()
+    return payment_id, url
+
+
+def cmd_pay_test(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    if not settings.yookassa_configured:
+        print("ЮKassa не настроена: нет shop_id/secret", file=sys.stderr)
+        return EXIT_PROBLEM
+    try:
+        payment_id, url = asyncio.run(_pay_test(settings.require_database_url(), args))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    print("Платёж создан: %s" % payment_id)
+    print("Ссылка для оплаты: %s" % url)
+    print("После оплаты выполните: cli pay-poll")
+    return EXIT_OK
+
+
+async def _pay_poll(dsn: str) -> list[str]:
+    from football_analyzer.payments.yookassa import fetch_payment
+
+    settings = get_settings()
+    pool = await db.connect(dsn)
+    result: list[str] = []
+    try:
+        rows = await db.pending_payments(pool)
+        if not rows:
+            return ["незакрытых платежей нет"]
+        async with aiohttp.ClientSession() as session:
+            for row in rows:
+                if not row["yookassa_id"]:
+                    continue
+                try:
+                    data = await fetch_payment(
+                        session,
+                        shop_id=settings.yookassa_shop_id or "",
+                        secret_key=settings.yookassa_secret_key or "",
+                        payment_id=str(row["yookassa_id"]),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    result.append("платёж %s: статус не получен (%s)" % (row["id"], exc))
+                    continue
+                status = str(data.get("status") or "")
+                if status == "succeeded":
+                    await db.close_payment(pool, row["id"], "succeeded")
+                    until = await db.grant_days(pool, int(row["chat_id"]), int(row["days"]))
+                    await db.log_event(pool, int(row["chat_id"]), "payment_succeeded")
+                    result.append(
+                        "платёж %s оплачен, подписка до %s"
+                        % (row["id"], until.strftime("%d.%m.%Y"))
+                    )
+                elif status == "canceled":
+                    await db.close_payment(pool, row["id"], "canceled")
+                    result.append("платёж %s отменён" % row["id"])
+                else:
+                    result.append("платёж %s: статус %s" % (row["id"], status))
+    finally:
+        await pool.close()
+    return result
+
+
+def cmd_pay_poll(args: argparse.Namespace) -> int:
+    settings = get_settings()
+    try:
+        lines = asyncio.run(_pay_poll(settings.require_database_url()))
+    except Exception as exc:  # noqa: BLE001
+        print("ОШИБКА: %s" % exc, file=sys.stderr)
+        return EXIT_PROBLEM
+    for line in lines:
+        print(line)
+    return EXIT_OK
+
+
 async def _add_partner(dsn: str, args) -> str:
     pool = await db.connect(dsn)
     try:
@@ -1585,6 +1688,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_funnel = sub.add_parser("funnel", help="воронка: шаги start → consent → оплата")
     p_funnel.set_defaults(func=cmd_funnel)
+
+    p_paytest = sub.add_parser("pay-test", help="создать платёж вручную (для стейджа)")
+    p_paytest.add_argument("--chat-id", type=int, required=True)
+    p_paytest.add_argument("--days", type=int, default=7)
+    p_paytest.add_argument("--amount", type=int, default=149)
+    p_paytest.set_defaults(func=cmd_pay_test)
+
+    p_paypoll = sub.add_parser("pay-poll", help="проверить статусы платежей вручную")
+    p_paypoll.set_defaults(func=cmd_pay_poll)
 
     p_partner = sub.add_parser("add-partner", help="зарегистрировать партнёра")
     p_partner.add_argument("--slug", required=True)

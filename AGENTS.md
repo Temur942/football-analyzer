@@ -393,3 +393,19 @@ Brier на отложенных матчах (0.25 = «всегда 50%»):
 2. **Прод-бот:** окружение и конвейер развёрнуты, но бот не включён — нужен
    постоянный доступ к Telegram (узел-туннель). После него: включить
    `football-analyzer-stage-prod.service` и проверить `getMe`.
+
+## Прод включён (24.11.2026)
+
+| Что | Значение |
+|---|---|
+| Бот | `football-analyzer-prod.service`, env `/etc/football-analyzer/prod.env` |
+| База | `football_prod`, роль `football_prod` (владелец всех таблиц) |
+| Сайт | тот же каталог `/var/www/football-analyzer-stage`, но собирается из **прод-базы** |
+| Таймеры | sync, matchcenter, content, accuracy, live, backup — все на `prod.env` |
+| Стейдж | `football-analyzer-stage.service` **выключен**; база `football` оставлена для тестовых платежей ЮKassa |
+
+**Важно:** `deploy/provision.sh prod` запускать нельзя — он делает `ufw --force reset`
+и закрывает 80/443, сайт упадёт. Прод настраивался вручную: база, env, юнит.
+
+**После `pg_dump | psql` нужно менять владельца таблиц** на `football_prod`, иначе
+синхронизация падает с `must be owner of table matches`.
